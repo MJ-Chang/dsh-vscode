@@ -3,12 +3,12 @@
 本 repo 已整備為「零設定」狀態：LICENSE、SECURITY、CHANGELOG、THIRD_PARTY_NOTICES、CI、issue 範本全部就位，`package.json` 的 `repository` / `homepage` / `bugs` / `icon` / `keywords` 已指向
 
 ```
-https://github.com/kindle1126/dsh-vscode
+https://github.com/MJ-Chang/dsh-vscode
 ```
 
 ## 1. 推上 GitHub（已完成 ✅）
 
-Repo 已公開：**https://github.com/kindle1126/dsh-vscode**（MIT，`main` 分支，CI 自動執行）。之後的日常開發流程：
+Repo 已公開：**https://github.com/MJ-Chang/dsh-vscode**（MIT，`main` 分支，CI 自動執行）。之後的日常開發流程：
 
 ```sh
 git add -A && git commit -m "..."
@@ -21,7 +21,7 @@ Marketplace 帳號無法由別人代辦，這是唯一需要你自己註冊的�
 
 ```sh
 npm install -g @vscode/vsce
-# 到 https://marketplace.visualstudio.com 建立 publisher（例如 kindle1126）
+# 到 https://marketplace.visualstudio.com 建立 publisher（例如 MJ-Chang）
 # 然後把 package.json 的 "publisher" 換成該 id，再：
 vsce login <publisher>
 npm run package && vsce publish

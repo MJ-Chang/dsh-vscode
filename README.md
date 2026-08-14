@@ -1,7 +1,7 @@
 # dsh-vscode — DeepSeek Harness for VS Code
 
-[![GitHub Release](https://img.shields.io/github/v/release/kindle1126/dsh-vscode?label=下載)](https://github.com/kindle1126/dsh-vscode/releases/latest)
-[![CI](https://github.com/kindle1126/dsh-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/kindle1126/dsh-vscode/actions/workflows/ci.yml)
+[![GitHub Release](https://img.shields.io/github/v/release/MJ-Chang/dsh-vscode?label=下載)](https://github.com/MJ-Chang/dsh-vscode/releases/latest)
+[![CI](https://github.com/MJ-Chang/dsh-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/MJ-Chang/dsh-vscode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%E2%89%A51.90-blue)](https://code.visualstudio.com/)
 
@@ -11,8 +11,8 @@
 
 ### 方式一：下載安裝檔（最簡單，推薦）
 
-1. 到 [Releases 頁面](https://github.com/kindle1126/dsh-vscode/releases/latest) 下載 `dsh-vscode-0.2.0.vsix`
-   （直連：[dsh-vscode-0.2.0.vsix](https://github.com/kindle1126/dsh-vscode/releases/latest/download/dsh-vscode-0.2.0.vsix)）
+1. 到 [Releases 頁面](https://github.com/MJ-Chang/dsh-vscode/releases/latest) 下載 `dsh-vscode-0.2.0.vsix`
+   （直連：[dsh-vscode-0.2.0.vsix](https://github.com/MJ-Chang/dsh-vscode/releases/latest/download/dsh-vscode-0.2.0.vsix)）
 2. 安裝（任選一種）：
    - VS Code 延伸模組面板 → `⋯` → **Install from VSIX...** → 選剛剛下載的檔案；或
    - `code --install-extension dsh-vscode-0.2.0.vsix`

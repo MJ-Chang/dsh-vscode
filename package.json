@@ -7,11 +7,11 @@
     "icon":  "media/icon.png",
     "repository":  {
                        "type":  "git",
-                       "url":  "https://github.com/kindle1126/dsh-vscode.git"
+                       "url":  "https://github.com/MJ-Chang/dsh-vscode.git"
                    },
-    "homepage":  "https://github.com/kindle1126/dsh-vscode#readme",
+    "homepage":  "https://github.com/MJ-Chang/dsh-vscode#readme",
     "bugs":  {
-                 "url":  "https://github.com/kindle1126/dsh-vscode/issues"
+                 "url":  "https://github.com/MJ-Chang/dsh-vscode/issues"
              },
     "keywords":  [
                      "deepseek",
