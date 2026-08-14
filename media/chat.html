@@ -17,8 +17,10 @@
       <h1 class="setup-title">DeepSeek Harness</h1>
       <p class="setup-subtitle">A coding agent in your editor, powered by DeepSeek Harness.</p>
       <label class="field-label" for="key-input">API Key</label>
-      <input id="key-input" type="password" class="key-input" placeholder="sk-…" autocomplete="off" spellcheck="false" autofocus>
-      <button id="connect-btn" class="connect-btn">Connect</button>
+      <div id="setup-key-group">
+        <input id="key-input" type="password" class="key-input" placeholder="sk-…" autocomplete="off" spellcheck="false" autofocus>
+        <button id="connect-btn" class="connect-btn">Connect</button>
+      </div>
       <p id="setup-error" class="setup-error" hidden></p>
       <p class="setup-hint">Stored in VS Code secret storage. Or set <code>DEEPSEEK_API_KEY</code> / workspace <code>.env</code>.</p>
     </div>

@@ -343,7 +343,7 @@
     if (messagesEl.querySelector('.msg, .tool-card') === null) showWelcome()
   }
 
-  function onState({ configured, model, workspace, workspacePath: wsPath, mode }) {
+  function onState({ configured, model, workspace, workspacePath: wsPath, mode, noWorkspace }) {
     currentModel = model
     currentMode = mode ?? 'workspace-write'
     modelName.textContent = model
@@ -352,6 +352,14 @@
     workspacePath = wsPath ?? ''
     workspaceEl.textContent = workspace || 'no workspace'
     workspaceEl.title = workspacePath !== '' ? `Workspace: ${workspacePath} (click to copy)` : ''
+    if (noWorkspace) {
+      const keyGroup = document.getElementById('setup-key-group')
+      if (keyGroup !== null) keyGroup.hidden = true
+      showSetup('Open a workspace folder first (File → Open Folder), then reopen this chat view.')
+      return
+    }
+    const keyGroup = document.getElementById('setup-key-group')
+    if (keyGroup !== null) keyGroup.hidden = false
     if (configured) {
       showChat()
       setStatus('starting')

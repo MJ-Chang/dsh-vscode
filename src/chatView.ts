@@ -32,12 +32,31 @@ interface WebviewMessage {
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   private readonly cleanup = new Set<() => void>()
   private view: vscode.WebviewView | undefined
+  private runtime: HarnessRuntime | undefined
 
-  /** @param context - the extension context (resources, secrets). */
+  /**
+   * @param context - the extension context (resources, secrets).
+   * @param runtimeFactory - lazily creates the workspace-bound runtime;
+   * returns undefined when no workspace folder is open.
+   */
   constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly runtime: HarnessRuntime,
+    private readonly runtimeFactory: () => HarnessRuntime | undefined,
   ) {}
+
+  /** Re-run the ready handshake (used when the workspace changes). */
+  async refreshState(): Promise<void> {
+    const view = this.view
+    if (view === undefined) return
+    await this.handleMessage({ type: 'ready' })
+  }
+
+  private ensureRuntime(): HarnessRuntime | undefined {
+    if (this.runtime === undefined) {
+      this.runtime = this.runtimeFactory()
+    }
+    return this.runtime
+  }
 
   /** Resolve (or re-resolve) the webview view when VS Code shows it. */
   resolveWebviewView(webviewView: vscode.WebviewView): void {
@@ -50,19 +69,28 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     }
     webviewView.webview.html = renderHtml(webviewView.webview, this.context.extensionUri)
 
-    const unsubscribe = this.runtime.subscribe((event: UiEvent) => {
-      void webviewView.webview.postMessage(event)
-    })
     const messageDisposable = webviewView.webview.onDidReceiveMessage(
       (message: WebviewMessage) => { void this.handleMessage(message) },
     )
-    this.cleanup.add(unsubscribe)
     this.cleanup.add(() => messageDisposable.dispose())
+    this.cleanup.add(() => { this.subscribeRuntime(undefined) })
 
     webviewView.onDidDispose(() => {
       for (const dispose of this.cleanup) dispose()
       this.cleanup.clear()
       if (this.view === webviewView) this.view = undefined
+    })
+  }
+
+  private runtimeCleanup: (() => void) | undefined
+
+  /** Forward runtime UI events to the current view; re-subscribes on change. */
+  private subscribeRuntime(runtime: HarnessRuntime | undefined): void {
+    this.runtimeCleanup?.()
+    this.runtimeCleanup = undefined
+    if (runtime === undefined || this.view === undefined) return
+    this.runtimeCleanup = runtime.subscribe((event: UiEvent) => {
+      void this.view?.webview.postMessage(event)
     })
   }
 
@@ -77,29 +105,53 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           const stored = await this.context.secrets.get(API_KEY_SECRET)
           const configured = (stored !== undefined && stored !== '')
             || (process.env[apiKeyEnv] !== undefined && process.env[apiKeyEnv] !== '')
+          const folder = vscode.workspace.workspaceFolders?.[0]
+          if (folder === undefined) {
+            await view.webview.postMessage({
+              type: 'state',
+              configured: false,
+              noWorkspace: true,
+              model: config.get<string>('model', 'deepseek-v4-flash'),
+              workspace: '',
+              workspacePath: '',
+              mode: 'workspace-write',
+            })
+            break
+          }
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
+          this.subscribeRuntime(runtime)
           await view.webview.postMessage({
             type: 'state',
             configured,
             model: config.get<string>('model', 'deepseek-v4-flash'),
-            workspace: vscode.workspace.workspaceFolders?.[0]?.name ?? '',
-            workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
-            mode: this.runtime.currentMode(),
+            workspace: folder.name,
+            workspacePath: folder.uri.fsPath,
+            mode: runtime.currentMode(),
           })
           if (configured) {
-            this.runtime.setApiKey(stored ?? undefined)
-            await this.runtime.start()
-            const models = await this.runtime.listModels()
+            runtime.setApiKey(stored ?? undefined)
+            await runtime.start()
+            const models = await runtime.listModels()
             await view.webview.postMessage({ type: 'models', models })
           }
           break
         }
         case 'setupKey': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) {
+            await view.webview.postMessage({
+              type: 'error',
+              message: 'Open a workspace folder first (File → Open Folder), then connect.',
+            })
+            break
+          }
           const key = (message.text ?? '').trim()
           if (key === '') return
           await this.context.secrets.store(API_KEY_SECRET, key)
-          this.runtime.setApiKey(key)
-          await this.runtime.start()
-          const models = await this.runtime.listModels()
+          runtime.setApiKey(key)
+          await runtime.start()
+          const models = await runtime.listModels()
           await view.webview.postMessage({ type: 'configured' })
           await view.webview.postMessage({ type: 'models', models })
           break
@@ -107,37 +159,53 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
         case 'copyPath':
           if (typeof message.text === 'string' && message.text !== '') {
             await vscode.env.clipboard.writeText(message.text)
-            void vscode.window.showInformationMessage(`DeepSeek Harness: workspace path copied to clipboard.`)
+            void vscode.window.showInformationMessage('DeepSeek Harness: workspace path copied to clipboard.')
           }
           break
-        case 'setMode':
+        case 'setMode': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
           if (typeof message.text === 'string' && message.text !== '') {
-            await this.runtime.setMode(message.text as 'read-only' | 'workspace-write' | 'danger-full-access')
+            await runtime.setMode(message.text as 'read-only' | 'workspace-write' | 'danger-full-access')
           }
           break
-        case 'setModel':
+        }
+        case 'setModel': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
           if (typeof message.text === 'string' && message.text !== '') {
-            await this.runtime.newSession(message.text)
+            await runtime.newSession(message.text)
             await view.webview.postMessage({ type: 'clear' })
           }
           break
-        case 'newSession':
-          await this.runtime.newSession()
+        }
+        case 'newSession': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
+          await runtime.newSession()
           await view.webview.postMessage({ type: 'clear' })
           break
-        case 'resumeSession':
+        }
+        case 'resumeSession': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
           if (typeof message.text === 'string' && message.text !== '') {
-            const events = await this.runtime.resumeSession(message.text)
+            const events = await runtime.resumeSession(message.text)
             await view.webview.postMessage({ type: 'clear' })
             await view.webview.postMessage({ type: 'transcript', events })
           }
           break
+        }
         case 'listSessions': {
-          const sessions = await this.runtime.listSessions()
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
+          const sessions = await runtime.listSessions()
           await view.webview.postMessage({ type: 'sessions', sessions })
           break
         }
         case 'pickFiles': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
           const workspace = vscode.workspace.workspaceFolders?.[0]
           const picked = await vscode.window.showOpenDialog({
             canSelectMany: true,
@@ -166,14 +234,25 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           if (files.length > 0) await view.webview.postMessage({ type: 'attachments', files })
           break
         }
-        case 'prompt':
+        case 'prompt': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) {
+            await view.webview.postMessage({
+              type: 'error',
+              message: 'Open a workspace folder first (File → Open Folder), then try again.',
+            })
+            break
+          }
           if (typeof message.text === 'string' && message.text.trim() !== '') {
-            await this.runtime.prompt(message.text, Array.isArray(message.files) ? message.files : [])
+            await runtime.prompt(message.text, Array.isArray(message.files) ? message.files : [])
           }
           break
-        case 'stop':
-          await this.runtime.cancel()
+        }
+        case 'stop': {
+          const runtime = this.ensureRuntime()
+          if (runtime !== undefined) await runtime.cancel()
           break
+        }
         default:
           break
       }

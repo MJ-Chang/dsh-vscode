@@ -43,9 +43,16 @@ await tick()
 
 check('webview posts ready on load', posted.some((m) => m.type === 'ready'))
 
+// --- no-workspace state → actionable message, key input hidden ---
+await post({ type: 'state', configured: false, noWorkspace: true, model: 'deepseek-v4-flash', workspace: '', workspacePath: '', mode: 'workspace-write' })
+check('no-workspace shows setup with message', !document.getElementById('setup').hidden)
+check('no-workspace hides the key input', document.getElementById('setup-key-group').hidden)
+check('no-workspace message shown', document.getElementById('setup-error').textContent.includes('workspace folder'))
+
 // --- unconfigured state → setup screen ---
 await post({ type: 'state', configured: false, model: 'deepseek-v4-flash', workspace: 'demo', workspacePath: 'C:/demo', mode: 'workspace-write' })
 check('setup screen visible when not configured', !document.getElementById('setup').hidden)
+check('key input visible again with a workspace', !document.getElementById('setup-key-group').hidden)
 
 // --- setupKey flow ---
 document.getElementById('key-input').value = 'sk-test'

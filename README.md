@@ -13,6 +13,28 @@ Everything is a plugin：這個 repo 同時包含 **VS Code 擴充功能** 與 *
 
 要發佈到 Marketplace / Open VSX 給所有人安裝，用 `vsce publish`（需先註冊 publisher）。
 
+## 使用者指南：開始使用
+
+1. **安裝**後若視窗原本就開著，先重載：`Ctrl+Shift+P` → `Developer: Reload Window`
+2. **開啟一個專案資料夾**（`File` → `Open Folder`）——聊天框需要一個工作區才能操作檔案
+3. **打開聊天框**：
+   - 右側邊欄出現 **DeepSeek Harness** 圖示（像 Codex/Copilot 的位置）→ 點它；或
+   - `Ctrl+Shift+P` → `DeepSeek Harness: Open Chat`；若右側欄沒開，先 `View: Toggle Secondary Side Bar`
+4. **輸入 API key**：第一次開啟會顯示設定畫面，貼上 `sk-...` → **Connect**（key 存在 VS Code SecretStorage；也可改用環境變數 `DEEPSEEK_API_KEY` 或工作區 `.env`）
+5. **開始對話**：輸入框打字 → Enter 送出；助手回覆串流顯示，工具呼叫（bash / read / write / edit…）以卡片展開
+
+**發送列控制項**（composer bar）：
+| 控制項 | 作用 |
+|---|---|
+| `📎` | 附加檔案（VS Code 選檔對話框），內容會隨訊息送給模型 |
+| `model ▾` | 切換模型（讀取 harness 目錄），切換即開新對話 |
+| `Workspace ▾`（色標） | 切換權限模式：Read-only（紅）/ Workspace（藍）/ Full access（橘） |
+| `0↑ · 0↓` | 本對話 token 用量（輸入/輸出） |
+| `history ▾` | 歷史對話（標題列）——點選續接之前的對話 |
+| `Send` / `Stop` | 送出 / 忙碌時變 Stop 可中止 |
+
+**其他**：頂部工作區名稱可點擊複製路徑；`DeepSeek Harness: Set API Key` / `Clear API Key` 指令可事後管理 key。
+
 ## 架構
 
 ```

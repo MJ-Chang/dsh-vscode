@@ -13,7 +13,8 @@ let activated = false
 
 const fakeVscode = {
   workspace: {
-    workspaceFolders: [{ uri: { fsPath: 'C:/fake/workspace' } }],
+    workspaceFolders: [{ uri: { fsPath: 'C:/fake/workspace' }, name: 'workspace' }],
+    onDidChangeWorkspaceFolders: () => ({ dispose() {} }),
     getConfiguration: () => ({
       get: (key, def) => {
         if (key === 'model') return 'deepseek-v4-flash'
