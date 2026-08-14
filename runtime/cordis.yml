@@ -42,9 +42,9 @@
     policy: never
 
 # Managed child-process groups for the shell executor. The base bundle splits
-# by platform: bash (sandboxed) on POSIX, PowerShell (sandboxed) on Windows —
-# dsh-bash-sandbox cannot create a service on Windows (E_ACCESSDENIED) and
-# spawning bash there flashes console windows.
+# by platform: bash (sandboxed) on POSIX, PowerShell (sandboxed) on Windows.
+# Console windows never flash because the runtime preload gives this process a
+# HIDDEN console that every child (pwsh, the sandbox runner, taskkill) shares.
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
 
