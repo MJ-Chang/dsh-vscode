@@ -61,7 +61,6 @@ try {
     model: 'deepseek-v4-flash',
   })
   console.log(`[1/6] initialize OK — ${init.serverInfo.name} ${init.serverInfo.version}`)
-
   const catalog = await client.request('models/list', {}, 5000)
   const models = catalog.models ?? []
   console.log(`[2/6] models/list OK — ${models.length} model(s): ${models.map((m) => m.id).join(', ') || '(none)'}`)
@@ -86,6 +85,9 @@ try {
   if (!sessionsFound.some((entry) => entry.sessionId === sessionId)) {
     console.error(`[WARN] session ${sessionId} not listed (persistence may flush later)`)
   }
+
+  const mode = await client.request('session/setMode', { sessionId, mode: 'read-only' }, 5000)
+  console.log(`[7/7] session/setMode OK — ${JSON.stringify(mode)}`)
 
   await sleep(2000)
   const uniqueTypes = [...new Set(events.map((event) => event?.type))]

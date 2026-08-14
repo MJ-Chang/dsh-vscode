@@ -10,57 +10,46 @@
 </head>
 <body>
 
-  <!-- ============ SETUP SCREEN ============ -->
+  <!-- ============ SETUP ============ -->
   <section id="setup" class="screen">
     <div class="setup-card">
       <div class="logo">DSH</div>
       <h1 class="setup-title">DeepSeek Harness</h1>
       <p class="setup-subtitle">A coding agent in your editor, powered by DeepSeek Harness.</p>
-
       <label class="field-label" for="key-input">API Key</label>
-      <input id="key-input" type="password" class="key-input" placeholder="sk-…"
-             autocomplete="off" spellcheck="false" autofocus>
+      <input id="key-input" type="password" class="key-input" placeholder="sk-…" autocomplete="off" spellcheck="false" autofocus>
       <button id="connect-btn" class="connect-btn">Connect</button>
-
       <p id="setup-error" class="setup-error" hidden></p>
-      <p class="setup-hint">Stored in VS Code secret storage. Never leaves this machine.</p>
-      <p class="setup-hint dim">Or export <code>DEEPSEEK_API_KEY</code> in your environment / workspace <code>.env</code>.</p>
+      <p class="setup-hint">Stored in VS Code secret storage. Or set <code>DEEPSEEK_API_KEY</code> / workspace <code>.env</code>.</p>
     </div>
   </section>
 
-  <!-- ============ CHAT SCREEN ============ -->
+  <!-- ============ CHAT ============ -->
   <section id="chat" class="screen" hidden>
     <header id="header">
-      <div class="header-row">
-        <span class="brand">DeepSeek Harness</span>
-        <span id="status" class="status status-idle">idle</span>
-      </div>
-      <div class="header-row sub">
-        <label class="select-wrap" title="Model">
-          <span class="select-label">model</span>
-          <select id="model-select" class="select"></select>
-        </label>
-        <label class="select-wrap" title="History">
-          <span class="select-label">history</span>
-          <select id="history-select" class="select">
-            <option value="">New conversation</option>
-          </select>
-        </label>
-        <button id="new-session" class="icon-btn" title="New session">＋</button>
-      </div>
-      <div class="header-row sub">
+      <div class="header-main">
         <span id="workspace" class="workspace"></span>
+        <span id="status" class="status status-idle">idle</span>
       </div>
     </header>
 
     <main id="messages" class="messages" aria-live="polite"></main>
 
+    <!-- popup menus (positioned above the composer) -->
+    <div id="menu-layer" class="menu-layer" hidden>
+      <div id="model-menu" class="menu" hidden></div>
+      <div id="mode-menu" class="menu" hidden></div>
+    </div>
+
     <footer id="composer">
       <textarea id="input" rows="2" placeholder="Ask to read, write, or change your project… (Enter to send)"
                 aria-label="Message"></textarea>
-      <div class="actions">
-        <button id="stop" class="btn stop-btn" title="Stop the current turn" disabled>Stop</button>
-        <button id="send" class="btn send-btn" title="Send">Send</button>
+      <div class="composer-bar">
+        <button id="model-btn" class="pill" title="Model">model <span id="model-name" class="pill-value"></span></button>
+        <button id="mode-btn" class="pill" title="Permission mode">mode <span id="mode-name" class="pill-value"></span></button>
+        <span class="spacer"></span>
+        <button id="history-btn" class="pill" title="History">history ▾</button>
+        <button id="send-btn" class="send-btn" title="Send">Send</button>
       </div>
     </footer>
   </section>

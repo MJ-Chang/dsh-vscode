@@ -26,6 +26,7 @@
 import { JsonRpcLineTransport } from '@deepseek-ai/dsh-sdk-protocol'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
 
 export const name = 'vscode-bridge'
@@ -151,6 +152,19 @@ export function apply(ctx) {
     return { cancelled: true }
   }
 
+  async function setMode(params) {
+    const sessionId = String(params.sessionId)
+    const mode = String(params.mode)
+    const allowed = ['read-only', 'workspace-write', 'danger-full-access']
+    if (!allowed.includes(mode)) {
+      throw new Error(`session/setMode: invalid mode "${mode}" (expected ${allowed.join(' | ')})`)
+    }
+    const agent = ctx.agents.get(SessionId(sessionId))
+    if (agent === undefined) throw new Error(`session/setMode: unknown session ${sessionId}`)
+    setSandboxMode(agent.session, mode)
+    return { mode }
+  }
+
   async function listSessions() {
     const headers = await ctx.sessionPersistence.list()
     return {
@@ -207,6 +221,7 @@ export function apply(ctx) {
       case 'session/new': result = await createSession(params ?? {}); break
       case 'session/prompt': result = await prompt(params ?? {}); break
       case 'session/cancel': result = await cancel(params ?? {}); break
+      case 'session/setMode': result = await setMode(params ?? {}); break
       case 'session/list': result = await listSessions(); break
       case 'shutdown': result = await shutdown(); break
       default: throw new Error(`unknown DeepSeek Harness SDK runtime method: ${method}`)

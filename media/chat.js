@@ -1,6 +1,7 @@
 /**
- * dsh-vscode chat webview: setup screen (API key), model + history selectors,
- * streaming chat, tool cards.
+ * dsh-vscode chat webview — layout and interactions modeled on Claude Code's
+ * VS Code extension: setup screen, message containers, model & permission
+ * mode menus, history, streaming assistant text, tool cards.
  */
 (() => {
   'use strict'
@@ -15,23 +16,35 @@
 
   const messagesEl = document.getElementById('messages')
   const inputEl = document.getElementById('input')
-  const sendBtn = document.getElementById('send')
-  const stopBtn = document.getElementById('stop')
-  const newSessionBtn = document.getElementById('new-session')
+  const sendBtn = document.getElementById('send-btn')
   const statusEl = document.getElementById('status')
-  const modelSelect = document.getElementById('model-select')
-  const historySelect = document.getElementById('history-select')
   const workspaceEl = document.getElementById('workspace')
+  const modelBtn = document.getElementById('model-btn')
+  const modelName = document.getElementById('model-name')
+  const modeBtn = document.getElementById('mode-btn')
+  const modeName = document.getElementById('mode-name')
+  const historyBtn = document.getElementById('history-btn')
+  const menuLayer = document.getElementById('menu-layer')
+  const modelMenu = document.getElementById('model-menu')
+  const modeMenu = document.getElementById('mode-menu')
+
+  const MODE_LABELS = {
+    'read-only': 'Read-only',
+    'workspace-write': 'Workspace',
+    'danger-full-access': 'Full access',
+  }
 
   let status = 'starting'
   let busy = false
+  let assistantContainer = null
   let assistantBlock = null
   let assistantText = ''
   let currentModel = ''
-  let sessionsCache = []
+  let currentMode = 'workspace-write'
+  let modelCatalog = []
   const toolCards = new Map()
 
-  // ---------- utilities ----------
+  // ---------- utils ----------
 
   const escapeHtml = (text) =>
     text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -94,11 +107,25 @@
 
   function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight }
 
-  function addMessageEl(className, html) {
+  function addContainer(label) {
+    const container = document.createElement('div')
+    container.className = 'message-container'
+    if (label) {
+      const labelEl = document.createElement('div')
+      labelEl.className = 'msg-label'
+      labelEl.textContent = label
+      container.appendChild(labelEl)
+    }
+    messagesEl.appendChild(container)
+    scrollToBottom()
+    return container
+  }
+
+  function addMessageEl(className, html, container) {
     const el = document.createElement('div')
     el.className = `msg ${className}`
     el.innerHTML = html
-    messagesEl.appendChild(el)
+    ;(container ?? messagesEl).appendChild(el)
     scrollToBottom()
     return el
   }
@@ -128,70 +155,102 @@
     statusEl.textContent = next
     statusEl.className = `status status-${next}`
     busy = next === 'busy' || next === 'starting'
-    stopBtn.disabled = !busy
     sendBtn.disabled = next === 'starting' || next === 'error'
+    sendBtn.textContent = busy ? 'Stop' : 'Send'
+    sendBtn.classList.toggle('stop', busy)
     inputEl.disabled = next === 'starting'
   }
 
-  // ---------- model + history ----------
+  // ---------- menus ----------
 
-  function onModels({ models }) {
-    const previous = modelSelect.value
-    modelSelect.replaceChildren()
-    if (!Array.isArray(models) || models.length === 0) {
-      const option = document.createElement('option')
-      option.value = currentModel
-      option.textContent = currentModel || 'deepseek-v4-flash'
-      modelSelect.appendChild(option)
-      return
-    }
-    for (const model of models) {
-      const option = document.createElement('option')
-      option.value = model.id
-      option.textContent = model.name ?? model.id
-      modelSelect.appendChild(option)
-    }
-    if (previous !== '' && [...modelSelect.options].some((o) => o.value === previous)) {
-      modelSelect.value = previous
-    }
-    currentModel = modelSelect.value
+  function closeMenus() {
+    modelMenu.hidden = true
+    modeMenu.hidden = true
+    menuLayer.hidden = true
   }
 
-  function formatWhen(createdAt) {
-    if (typeof createdAt !== 'number') return 'unknown time'
-    const diff = Date.now() - createdAt
-    if (diff < 60_000) return 'just now'
-    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
-    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
-    return `${Math.floor(diff / 86_400_000)}d ago`
-  }
-
-  function onSessions({ sessions }) {
-    sessionsCache = Array.isArray(sessions) ? sessions : []
-    const previous = historySelect.value
-    historySelect.replaceChildren()
-    const fresh = document.createElement('option')
-    fresh.value = ''
-    fresh.textContent = 'New conversation'
-    historySelect.appendChild(fresh)
-    for (const session of sessionsCache) {
-      const option = document.createElement('option')
-      option.value = session.sessionId
-      option.textContent = `${formatWhen(session.createdAt)} · ${session.sessionId.slice(0, 8)}`
-      historySelect.appendChild(option)
+  function renderMenu(menuEl, items, selectedValue, onPick) {
+    menuEl.replaceChildren()
+    for (const item of items) {
+      const row = document.createElement('div')
+      row.className = `menu-item${item.value === selectedValue ? ' selected' : ''}`
+      const label = document.createElement('div')
+      label.className = 'menu-item-label'
+      label.innerHTML = `${escapeHtml(item.label)}${item.value === selectedValue ? '<span class="check">✓</span>' : ''}`
+      row.appendChild(label)
+      if (item.description) {
+        const desc = document.createElement('div')
+        desc.className = 'menu-item-desc'
+        desc.textContent = item.description
+        row.appendChild(desc)
+      }
+      row.addEventListener('click', () => {
+        closeMenus()
+        onPick(item.value)
+      })
+      menuEl.appendChild(row)
     }
-    historySelect.value = previous
   }
 
-  // ---------- events ----------
+  function openMenu(menuEl) {
+    closeMenus()
+    menuEl.hidden = false
+    menuLayer.hidden = false
+  }
 
-  function onState({ configured, model, workspace }) {
+  modelBtn.addEventListener('click', () => {
+    renderMenu(modelMenu, modelCatalog.length > 0 ? modelCatalog.map((m) => ({
+      value: m.id,
+      label: m.name ?? m.id,
+      description: m.description ?? '',
+    })) : [{ value: currentModel, label: currentModel, description: '' }], currentModel, (model) => {
+      if (model !== currentModel) {
+        currentModel = model
+        modelName.textContent = model
+        addMessageEl('system', `New conversation · model: ${model}`)
+        vscode.postMessage({ type: 'setModel', text: model })
+      }
+    })
+    openMenu(modelMenu)
+  })
+
+  modeBtn.addEventListener('click', () => {
+    renderMenu(modeMenu, Object.entries(MODE_LABELS).map(([value, label]) => ({
+      value,
+      label,
+      description: value === 'read-only' ? 'The agent can only read files.'
+        : value === 'workspace-write' ? 'Can edit files inside the workspace.'
+          : 'Full filesystem access (use with care).',
+    })), currentMode, (mode) => {
+      if (mode !== currentMode) {
+        currentMode = mode
+        modeName.textContent = MODE_LABELS[mode]
+        vscode.postMessage({ type: 'setMode', text: mode })
+      }
+    })
+    openMenu(modeMenu)
+  })
+
+  historyBtn.addEventListener('click', () => {
+    closeMenus()
+    vscode.postMessage({ type: 'listSessions' })
+  })
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.menu')) closeMenus()
+  })
+
+  // ---------- host events ----------
+
+  function onState({ configured, model, workspace, mode }) {
     currentModel = model
-    workspaceEl.textContent = workspace
+    currentMode = mode ?? 'workspace-write'
+    modelName.textContent = model
+    modeName.textContent = MODE_LABELS[currentMode]
+    workspaceEl.textContent = workspace || 'no workspace'
     if (configured) {
       showChat()
       setStatus('starting')
-      vscode.postMessage({ type: 'listSessions' })
     } else {
       showSetup()
     }
@@ -203,13 +262,47 @@
     vscode.postMessage({ type: 'listSessions' })
   }
 
+  function onModels({ models }) {
+    modelCatalog = Array.isArray(models) ? models : []
+    if (modelCatalog.length > 0 && modelCatalog.some((m) => m.id === currentModel)) {
+      // keep current selection
+    } else if (modelCatalog.length > 0) {
+      currentModel = modelCatalog[0].id
+      modelName.textContent = currentModel
+    }
+  }
+
+  function onSessions({ sessions }) {
+    const list = Array.isArray(sessions) ? sessions : []
+    if (list.length === 0) {
+      addMessageEl('system', 'No previous conversations yet.')
+      return
+    }
+    const container = addContainer('HISTORY')
+    for (const session of list) {
+      const row = document.createElement('div')
+      row.className = 'menu-item'
+      const label = document.createElement('div')
+      label.className = 'menu-item-label'
+      label.textContent = `${session.createdAt ? new Date(session.createdAt).toLocaleString() : 'unknown'} · ${session.sessionId.slice(0, 10)}`
+      row.appendChild(label)
+      row.addEventListener('click', () => {
+        container.remove()
+        addMessageEl('system', 'Resuming previous conversation…')
+        vscode.postMessage({ type: 'resumeSession', text: session.sessionId })
+      })
+      container.appendChild(row)
+    }
+  }
+
   function onSystemMessage({ text }) {
     addMessageEl('system', escapeHtml(text))
   }
 
   function onAssistantDelta({ text }) {
     if (assistantBlock === null) {
-      assistantBlock = addMessageEl('assistant streaming', '')
+      assistantContainer = addContainer('ASSISTANT')
+      assistantBlock = addMessageEl('assistant streaming', '', assistantContainer)
       assistantText = ''
     }
     assistantText += text
@@ -221,6 +314,7 @@
   function onAssistantDone() {
     if (assistantBlock !== null) assistantBlock.classList.remove('streaming')
     assistantBlock = null
+    assistantContainer = null
     assistantText = ''
   }
 
@@ -292,8 +386,6 @@
     setStatus('idle')
   }
 
-  // ---------- host messages ----------
-
   window.addEventListener('message', (event) => {
     const message = event.data
     switch (message.type) {
@@ -328,32 +420,17 @@
     if (event.key === 'Enter') { event.preventDefault(); void connect() }
   })
 
-  modelSelect.addEventListener('change', () => {
-    const model = modelSelect.value
-    if (model === '' || model === currentModel) return
-    currentModel = model
-    addMessageEl('system', `New conversation · model: ${model}`)
-    vscode.postMessage({ type: 'setModel', text: model })
-  })
-
-  historySelect.addEventListener('focus', () => { vscode.postMessage({ type: 'listSessions' }) })
-  historySelect.addEventListener('change', () => {
-    const sessionId = historySelect.value
-    historySelect.value = ''
-    if (sessionId === '') {
-      vscode.postMessage({ type: 'newSession' })
-    } else {
-      addMessageEl('system', 'Resuming previous conversation…')
-      vscode.postMessage({ type: 'resumeSession', text: sessionId })
-    }
-  })
-
   function send() {
+    if (busy) {
+      vscode.postMessage({ type: 'stop' })
+      return
+    }
     const text = inputEl.value.trim()
-    if (text === '' || busy) return
+    if (text === '') return
     inputEl.value = ''
     inputEl.style.height = 'auto'
-    addMessageEl('user', escapeHtml(text))
+    const container = addContainer('YOU')
+    addMessageEl('user', escapeHtml(text), container)
     vscode.postMessage({ type: 'prompt', text })
   }
 
@@ -364,8 +441,6 @@
       send()
     }
   })
-  stopBtn.addEventListener('click', () => { vscode.postMessage({ type: 'stop' }) })
-  newSessionBtn.addEventListener('click', () => { vscode.postMessage({ type: 'newSession' }) })
 
   vscode.postMessage({ type: 'ready' })
 })()

@@ -100,10 +100,35 @@ export class HarnessRuntime {
   private started = false
   private closed = false
   private apiKey: string | undefined
+  private permissionMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   private readonly listeners = new Set<(event: UiEvent) => void>()
 
   /** @param options - launch and routing configuration. */
-  constructor(private readonly options: RuntimeOptions) {}
+  constructor(private readonly options: RuntimeOptions) {
+    this.permissionMode = options.workspaceWriteOnly ? 'workspace-write' : 'danger-full-access'
+  }
+
+  /** The current sandbox permission mode of the active session. */
+  currentMode(): 'read-only' | 'workspace-write' | 'danger-full-access' {
+    return this.permissionMode
+  }
+
+  /** Switch the active session's sandbox permission mode (live, via the bridge). */
+  async setMode(mode: 'read-only' | 'workspace-write' | 'danger-full-access'): Promise<boolean> {
+    const client = this.client
+    if (client === undefined || this.sessionId === undefined) return false
+    try {
+      await client.request('session/setMode', { sessionId: this.sessionId, mode }, 5_000)
+      this.permissionMode = mode
+      this.emit({
+        type: 'systemMessage',
+        text: `Permission mode: ${mode} (applies from the next tool call)`,
+      })
+      return true
+    } catch {
+      return false
+    }
+  }
 
   /**
    * Set the API key before start (or before the next start). Injected into the
