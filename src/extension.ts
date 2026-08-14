@@ -19,6 +19,17 @@ const API_KEY_SECRET = 'dshVscode.apiKey'
 
 let runtime: HarnessRuntime | undefined
 let chatProvider: ChatViewProvider | undefined
+let workspaceTarget: string | undefined
+
+/** The workspace folder the runtime should bind to: the explicitly picked
+ * folder while it is still open, otherwise the first opened folder. */
+function activeWorkspacePath(): string | undefined {
+  const folders = vscode.workspace.workspaceFolders ?? []
+  if (workspaceTarget !== undefined && folders.some(folder => folder.uri.fsPath === workspaceTarget)) {
+    return workspaceTarget
+  }
+  return folders[0]?.uri.fsPath
+}
 
 /** Plugin-manager paths derived from the extension context. */
 function pluginPaths(context: vscode.ExtensionContext): PluginPaths {
@@ -31,18 +42,32 @@ function pluginPaths(context: vscode.ExtensionContext): PluginPaths {
 /** Create the workspace-bound runtime; undefined when no folder is open. */
 function createRuntime(context: vscode.ExtensionContext): HarnessRuntime | undefined {
   if (runtime !== undefined) return runtime
-  const folder = vscode.workspace.workspaceFolders?.[0]
-  if (folder === undefined) return undefined
+  const workspacePath = activeWorkspacePath()
+  if (workspacePath === undefined) return undefined
   const config = vscode.workspace.getConfiguration('dshVscode')
   runtime = new HarnessRuntime({
     extensionPath: context.extensionPath,
-    workspacePath: folder.uri.fsPath,
+    workspacePath,
     storagePath: context.globalStorageUri.fsPath,
     model: config.get<string>('model', 'deepseek-v4-flash'),
     apiKeyEnv: config.get<string>('apiKeyEnv', 'DEEPSEEK_API_KEY'),
     workspaceWriteOnly: config.get<boolean>('workspaceWriteOnly', true),
   })
   return runtime
+}
+
+/** Rebind the runtime to another OPEN workspace folder (multi-root support). */
+async function switchWorkspace(path: string): Promise<boolean> {
+  const folders = vscode.workspace.workspaceFolders ?? []
+  if (!folders.some(folder => folder.uri.fsPath === path)) return false
+  workspaceTarget = path
+  const current = runtime
+  if (current !== undefined && !current.isDisposed() && current.workspacePath() !== path) {
+    void current.dispose()
+    runtime = undefined
+  }
+  await chatProvider?.refreshState()
+  return true
 }
 
 /** Activate the extension: register the right-side chat view and commands. */
@@ -178,17 +203,30 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // The provider is always registered; the runtime is created lazily on first
   // use so a missing workspace shows an actionable message, not a dead view.
-  chatProvider = new ChatViewProvider(context, () => createRuntime(context))
+  chatProvider = new ChatViewProvider(context, () => createRuntime(context), switchWorkspace)
   const viewOptions = { webviewOptions: { retainContextWhenHidden: true } }
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, chatProvider, viewOptions),
     vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID_SECONDARY, chatProvider, viewOptions),
   )
 
-  // When the user opens a folder after the view was created, refresh it so
-  // the chat becomes usable without a reload.
+  // When the user opens a different folder, rebind the runtime to it (the
+  // sandbox root must never silently stay on a previous workspace).
   context.subscriptions.push(
-    vscode.workspace.onDidChangeWorkspaceFolders(() => { void chatProvider?.refreshState() }),
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      const current = runtime
+      const next = activeWorkspacePath()
+      // The explicitly picked folder closed: fall back to the first folder.
+      if (workspaceTarget !== undefined && next !== undefined && next !== workspaceTarget) {
+        workspaceTarget = undefined
+      }
+      if (current !== undefined && !current.isDisposed()
+        && next !== undefined && current.workspacePath() !== next) {
+        void current.dispose()
+        runtime = undefined
+      }
+      void chatProvider?.refreshState()
+    }),
   )
 }
 

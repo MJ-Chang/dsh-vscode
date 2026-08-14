@@ -38,6 +38,7 @@
   const historyMenu = document.getElementById('history-menu')
   const presetMenu = document.getElementById('preset-menu')
   const settingsMenu = document.getElementById('settings-menu')
+  const workspaceMenu = document.getElementById('workspace-menu')
 
   const MODE_LABELS = {
     'read-only': 'Read-only',
@@ -56,6 +57,7 @@
   let modelCatalog = []
   let presetCatalog = []
   let workspacePath = ''
+  let workspaceFolders = []
   let attachments = []
   let usageInput = 0
   let usageOutput = 0
@@ -236,6 +238,7 @@
     historyMenu.hidden = true
     presetMenu.hidden = true
     settingsMenu.hidden = true
+    workspaceMenu.hidden = true
     menuLayer.hidden = true
   }
 
@@ -292,10 +295,9 @@
         : value === 'workspace-write' ? 'Can edit files inside the workspace.'
           : 'Full filesystem access (use with care).',
     })), currentMode, (mode) => {
+      // The host confirms the switch (full access asks for confirmation);
+      // the UI updates from the authoritative 'mode' message.
       if (mode !== currentMode) {
-        currentMode = mode
-        modeName.textContent = MODE_LABELS[mode]
-        modePill.dataset.mode = mode
         vscode.postMessage({ type: 'setMode', text: mode })
       }
     })
@@ -308,7 +310,18 @@
   })
 
   workspaceEl.addEventListener('click', () => {
-    if (workspacePath !== '') {
+    if (workspaceFolders.length > 1) {
+      renderMenu(workspaceMenu, workspaceFolders.map((folder) => ({
+        value: folder.path,
+        label: folder.name,
+        description: folder.path,
+      })), workspacePath, (path) => {
+        if (path !== workspacePath) {
+          vscode.postMessage({ type: 'setWorkspace', text: path })
+        }
+      })
+      openMenu(workspaceMenu)
+    } else if (workspacePath !== '') {
       vscode.postMessage({ type: 'copyPath', text: workspacePath })
     }
   })
@@ -362,7 +375,7 @@
     // Close menus only when the click lands outside every menu AND outside
     // the buttons that open them (otherwise a menu opens and instantly closes).
     const inside = event.target.closest(
-      '.menu-layer, #model-btn, #mode-btn, #history-btn, #preset-btn, #settings-btn',
+      '.menu-layer, #model-btn, #mode-btn, #history-btn, #preset-btn, #settings-btn, #workspace',
     )
     if (!inside) closeMenus()
   })
@@ -445,7 +458,9 @@
       { value: '__new', label: '＋ New conversation', description: '' },
       ...list.map((session) => ({
         value: session.sessionId,
-        label: `${formatWhen(session.createdAt)} · ${session.sessionId.slice(0, 10)}`,
+        label: typeof session.title === 'string' && session.title !== ''
+          ? session.title
+          : `${formatWhen(session.createdAt)} · ${session.sessionId.slice(0, 10)}`,
         description: session.cwd ?? '',
       })),
     ]
@@ -516,13 +531,45 @@
       assistantText = ''
     }
     assistantText += text
-    assistantBlock.innerHTML = renderMarkdown(assistantText)
     assistantBlock.classList.add('streaming')
-    scrollToBottom()
+    scheduleAssistantRender()
+  }
+
+  // Streaming re-renders once per animation frame (not once per delta): long
+  // replies arrive in fast bursts and a full markdown re-render per chunk is
+  // quadratic. The final flush on assistantDone renders synchronously.
+  let assistantRenderFrame = 0
+  function scheduleAssistantRender() {
+    if (assistantRenderFrame !== 0) return
+    const raf = typeof requestAnimationFrame === 'function'
+      ? requestAnimationFrame
+      : (fn) => setTimeout(fn, 16)
+    assistantRenderFrame = raf(() => {
+      assistantRenderFrame = 0
+      if (assistantBlock !== null) {
+        assistantBlock.innerHTML = renderMarkdown(assistantText)
+        scrollToBottom()
+      }
+    })
+  }
+
+  function flushAssistantRender() {
+    if (assistantRenderFrame !== 0) {
+      if (typeof cancelAnimationFrame === 'function') cancelAnimationFrame(assistantRenderFrame)
+      else clearTimeout(assistantRenderFrame)
+      assistantRenderFrame = 0
+    }
+    if (assistantBlock !== null) {
+      assistantBlock.innerHTML = renderMarkdown(assistantText)
+      scrollToBottom()
+    }
   }
 
   function onAssistantDone() {
-    if (assistantBlock !== null) assistantBlock.classList.remove('streaming')
+    if (assistantBlock !== null) {
+      flushAssistantRender()
+      assistantBlock.classList.remove('streaming')
+    }
     assistantBlock = null
     assistantContainer = null
     assistantText = ''
@@ -534,7 +581,7 @@
 
     const card = document.createElement('details')
     card.className = 'tool-card'
-    card.open = true
+    card.open = false
 
     const summary = document.createElement('summary')
     const nameEl = document.createElement('span')
@@ -568,6 +615,9 @@
       record.stateEl.textContent = ok ? 'ok' : 'error'
       record.stateEl.classList.toggle('ok', ok)
       record.stateEl.classList.toggle('err', !ok)
+      // Failed tools expand automatically so the error is visible; successful
+      // ones stay collapsed to keep long tool sequences readable.
+      if (!ok) record.card.open = true
       if (summary !== '') {
         record.resultEl.textContent = summary
         record.resultEl.style.display = 'block'
@@ -613,7 +663,20 @@
       case 'sessions': onSessions(message); break
       case 'transcript': onTranscript(message); break
       case 'attachments': onAttachments(message); break
+      case 'workspaces': {
+        workspaceFolders = Array.isArray(message.folders) ? message.folders : []
+        if (typeof message.active === 'string' && message.active !== '') {
+          workspacePath = message.active
+        }
+        break
+      }
       case 'usage': onUsage(message); break
+      case 'mode': {
+        currentMode = message.mode
+        modeName.textContent = MODE_LABELS[message.mode]
+        modePill.dataset.mode = message.mode
+        break
+      }
       case 'status': setStatus(message.status); break
       case 'systemMessage': onSystemMessage(message); break
       case 'assistantDelta': onAssistantDelta(message); break
@@ -667,6 +730,17 @@
     if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault()
       send()
+    }
+  })
+
+  // Markdown links open in the external browser (webviews cannot navigate).
+  messagesEl.addEventListener('click', (event) => {
+    const anchor = event.target.closest('a')
+    if (anchor === null) return
+    event.preventDefault()
+    const href = anchor.getAttribute('href') ?? ''
+    if (/^https?:\/\//i.test(href)) {
+      vscode.postMessage({ type: 'openLink', text: href })
     }
   })
 

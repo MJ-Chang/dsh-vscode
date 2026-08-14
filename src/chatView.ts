@@ -38,16 +38,22 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
    * @param context - the extension context (resources, secrets).
    * @param runtimeFactory - lazily creates the workspace-bound runtime;
    * returns undefined when no workspace folder is open.
+   * @param workspaceSwitcher - rebinds the runtime to another open workspace
+   * folder (multi-root support); returns false when the folder is not open.
    */
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly runtimeFactory: () => HarnessRuntime | undefined,
+    private readonly workspaceSwitcher?: (path: string) => Promise<boolean>,
   ) {}
 
   /** Re-run the ready handshake (used when the workspace changes). */
   async refreshState(): Promise<void> {
     const view = this.view
     if (view === undefined) return
+    if (this.runtime !== undefined && this.runtime.isDisposed()) {
+      await view.webview.postMessage({ type: 'clear' })
+    }
     await this.handleMessage({ type: 'ready' })
   }
 
@@ -64,7 +70,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
   }
 
   private ensureRuntime(): HarnessRuntime | undefined {
-    if (this.runtime === undefined) {
+    if (this.runtime === undefined || this.runtime.isDisposed()) {
       this.runtime = this.runtimeFactory()
     }
     return this.runtime
@@ -133,13 +139,23 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           const runtime = this.ensureRuntime()
           if (runtime === undefined) break
           this.subscribeRuntime(runtime)
+          const bound = (vscode.workspace.workspaceFolders ?? [])
+            .find(entry => entry.uri.fsPath === runtime.workspacePath())
           await view.webview.postMessage({
             type: 'state',
             configured,
             model: config.get<string>('model', 'deepseek-v4-flash'),
-            workspace: folder.name,
-            workspacePath: folder.uri.fsPath,
+            workspace: bound?.name ?? folder.name,
+            workspacePath: bound?.uri.fsPath ?? folder.uri.fsPath,
             mode: runtime.currentMode(),
+          })
+          await view.webview.postMessage({
+            type: 'workspaces',
+            folders: (vscode.workspace.workspaceFolders ?? []).map(entry => ({
+              name: entry.name,
+              path: entry.uri.fsPath,
+            })),
+            active: runtime.workspacePath(),
           })
           if (configured) {
             runtime.setApiKey(stored ?? undefined)
@@ -195,11 +211,42 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             void vscode.window.showInformationMessage('DeepSeek Harness: workspace path copied to clipboard.')
           }
           break
+        case 'openLink': {
+          const url = message.text ?? ''
+          if (/^https?:\/\//i.test(url)) {
+            void vscode.env.openExternal(vscode.Uri.parse(url))
+          }
+          break
+        }
         case 'setMode': {
           const runtime = this.ensureRuntime()
           if (runtime === undefined) break
+          const mode = message.text
+          if (mode === 'danger-full-access') {
+            const choice = await vscode.window.showWarningMessage(
+              'Full access lets the agent read and change ANY file on this machine. Only enable it for projects you fully trust.',
+              { modal: true },
+              'Continue',
+            )
+            if (choice !== 'Continue') break
+          }
+          if (typeof mode === 'string'
+            && (mode === 'read-only' || mode === 'workspace-write' || mode === 'danger-full-access')) {
+            const ok = await runtime.setMode(mode)
+            if (ok) await view.webview.postMessage({ type: 'mode', mode })
+          }
+          break
+        }
+        case 'setWorkspace': {
+          if (this.workspaceSwitcher === undefined) break
           if (typeof message.text === 'string' && message.text !== '') {
-            await runtime.setMode(message.text as 'read-only' | 'workspace-write' | 'danger-full-access')
+            const ok = await this.workspaceSwitcher(message.text)
+            if (!ok) {
+              await view.webview.postMessage({
+                type: 'error',
+                message: 'That workspace folder is no longer open.',
+              })
+            }
           }
           break
         }

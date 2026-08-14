@@ -153,7 +153,7 @@ export function apply(ctx) {
     const hwnd = GetConsoleWindow()
     console.log('PROBE=' + JSON.stringify({ hasConsole: hwnd !== null, visible: hwnd !== null ? IsWindowVisible(hwnd) !== 0 : false }))
   `
-  const SYSTEM_NODE = 'C:\\Program Files\\nodejs\\node.exe'
+  const SYSTEM_NODE = process.env.DSH_DEBUG_NODE ?? 'C:\\Program Files\\nodejs\\node.exe'
 
   async function runProbe(argv) {
     const subprocess = ctx.get('subprocess')
@@ -260,17 +260,33 @@ export function apply(ctx) {
 
   async function listSessions() {
     const headers = await ctx.sessionPersistence.list()
+    const projectionCache = ctx.get('sessionProjectionCache')
+    const liveProjections = ctx.get('sessionProjections')
     return {
       // Only this workspace's history: the persistence root is shared by all
       // workspaces, so filter on the session cwd.
       sessions: headers
         .filter((header) => header.cwd === cwd)
-        .map((header) => ({
-          sessionId: String(header.id),
-          cwd: header.cwd,
-          createdAt: header.createdAt,
-          parentSession: header.parentSession === undefined ? undefined : String(header.parentSession),
-        })),
+        .map((header) => {
+          let title = null
+          try {
+            let block
+            const live = ctx.sessions?.get(header.id)
+            if (live !== undefined) block = liveProjections?.snapshot(live)
+            else block = projectionCache?.cachedSnapshot(header)
+            const value = block?.values?.title
+            if (typeof value === 'string' && value !== '') title = value
+          } catch {
+            // Fail-soft: title stays null when no projection service is mounted.
+          }
+          return {
+            sessionId: String(header.id),
+            cwd: header.cwd,
+            createdAt: header.createdAt,
+            title,
+            parentSession: header.parentSession === undefined ? undefined : String(header.parentSession),
+          }
+        }),
     }
   }
 

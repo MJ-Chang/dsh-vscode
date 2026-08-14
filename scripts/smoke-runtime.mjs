@@ -11,6 +11,7 @@
  * one the run still validates boot, handshake, catalog, history, prompt
  * queueing, cancellation, and event streaming.
  */
+import { existsSync } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import * as path from 'node:path'
@@ -24,14 +25,30 @@ const config = path.join(root, 'runtime', 'cordis.yml')
 const workspace = path.join(root, '.smoke-workspace')
 const sessions = path.join(root, '.smoke-sessions')
 
+/** A console-subsystem node.exe on Windows (so the runtime's hidden console
+ * is inherited by shell children); the host node everywhere else. */
+function resolveSystemNode() {
+  if (process.platform !== 'win32') return process.execPath
+  const candidates = [
+    'C:\\Program Files\\nodejs\\node.exe',
+    'C:\\Program Files (x86)\\nodejs\\node.exe',
+  ]
+  for (const dir of (process.env.Path ?? '').split(';')) {
+    if (dir !== '') candidates.push(path.join(dir.trim(), 'node.exe'))
+  }
+  for (const candidate of candidates) {
+    if (candidate !== '' && existsSync(candidate)) return candidate
+  }
+  return process.execPath
+}
+
 await mkdir(workspace, { recursive: true })
 await mkdir(sessions, { recursive: true })
 
 const client = new HarnessClient({
-  // A console-subsystem node.exe (like the extension now uses) so the
-  // runtime's hidden console is inherited by shell children.
-  command: 'C:\\Program Files\\nodejs\\node.exe',
-  // Same launch shape as the extension: the hidden-console preload.
+  // Same launch shape as the extension: a console-subsystem node.exe plus
+  // the hidden-console preload.
+  command: resolveSystemNode(),
   args: ['--require', path.join(root, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/'), bin, config],
   cwd: workspace,
   env: {

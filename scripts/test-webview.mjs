@@ -122,18 +122,37 @@ const readOnlyItem = [...document.querySelectorAll('#mode-menu .menu-item')].fin
 readOnlyItem?.click()
 await tick()
 check('selecting a mode posts setMode', posted.some((m) => m.type === 'setMode' && m.text === 'read-only'))
-check('mode pill updates', document.getElementById('mode-name').textContent === 'Read-only')
+check('mode pill not updated until host confirms', document.getElementById('mode-name').textContent === 'Workspace')
+await post({ type: 'mode', mode: 'read-only' })
+check('mode pill updates on host confirmation', document.getElementById('mode-name').textContent === 'Read-only')
 
 // --- workspace copies its path ---
 document.getElementById('workspace').click()
 await tick()
 check('workspace click posts copyPath', posted.some((m) => m.type === 'copyPath'))
 
+// --- multi-root workspace switcher ---
+await post({
+  type: 'workspaces',
+  folders: [{ name: 'alpha', path: 'C:/alpha' }, { name: 'beta', path: 'C:/beta' }],
+  active: 'C:/alpha',
+})
+document.getElementById('workspace').click()
+await tick()
+check('multi-root click opens workspace menu', !document.getElementById('workspace-menu').hidden)
+check('workspace menu lists both folders', document.querySelectorAll('#workspace-menu .menu-item').length === 2)
+const betaItem = [...document.querySelectorAll('#workspace-menu .menu-item')].find((el) => el.textContent.includes('beta'))
+betaItem?.click()
+await tick()
+check('picking a folder posts setWorkspace', posted.some((m) => m.type === 'setWorkspace' && m.text === 'C:/beta'))
+
 // --- sessions (history menu) ---
 await post({ type: 'sessions', sessions: [{ sessionId: 'abc123', createdAt: Date.now() }] })
 check('history menu opened', !document.getElementById('history-menu').hidden)
 check('history menu has items incl. new conversation', document.querySelectorAll('#history-menu .menu-item').length >= 2)
 check('history menu offers New conversation', [...document.querySelectorAll('#history-menu .menu-item')].some((el) => el.textContent.includes('New conversation')))
+await post({ type: 'sessions', sessions: [{ sessionId: 'titled-1', createdAt: Date.now(), title: 'Fix the parser' }] })
+check('history shows session title when available', [...document.querySelectorAll('#history-menu .menu-item')].some((el) => el.textContent.includes('Fix the parser')))
 
 // --- transcript (resumed conversation) ---
 await post({
@@ -146,9 +165,10 @@ await post({
 check('transcript renders user message', [...document.querySelectorAll('.msg.user')].some((el) => el.textContent.includes('earlier question')))
 check('transcript renders assistant message', [...document.querySelectorAll('.msg.assistant')].some((el) => el.textContent.includes('earlier answer')))
 
-// --- streaming assistant ---
+// --- streaming assistant (frame-throttled; flushes on assistantDone) ---
 await post({ type: 'assistantDelta', text: 'Hello, ' })
 await post({ type: 'assistantDelta', text: 'world!' })
+await post({ type: 'assistantDone' })
 const assistants = [...document.querySelectorAll('.msg.assistant')]
 check('assistant message rendered', assistants.some((el) => el.textContent.includes('world')))
 
@@ -157,8 +177,21 @@ await post({ type: 'toolCall', callId: 'call-1', name: 'bash', args: '{"command"
 const toolCard = document.querySelector('.tool-card')
 check('tool card rendered', toolCard !== null)
 check('tool name shown', toolCard !== null && toolCard.textContent.includes('bash'))
+check('tool card collapsed by default', toolCard !== null && toolCard.open === false)
 await post({ type: 'toolResult', callId: 'call-1', name: 'bash', ok: true, summary: 'file1 file2' })
 check('tool result marked ok', document.querySelector('.tool-state.ok') !== null)
+await post({ type: 'toolCall', callId: 'call-2', name: 'pwsh', args: '{}' })
+const errCard = [...document.querySelectorAll('.tool-card')].at(-1)
+await post({ type: 'toolResult', callId: 'call-2', name: 'pwsh', ok: false, summary: 'boom' })
+check('failed tool card auto-expands', errCard !== undefined && errCard.open === true)
+
+// --- markdown link opens externally ---
+const linkEl = document.createElement('a')
+linkEl.setAttribute('href', 'https://example.com/docs')
+document.getElementById('messages').appendChild(linkEl)
+linkEl.click()
+await tick()
+check('markdown link posts openLink', posted.some((m) => m.type === 'openLink' && m.text === 'https://example.com/docs'))
 
 // --- busy/stop state ---
 await post({ type: 'status', status: 'busy' })

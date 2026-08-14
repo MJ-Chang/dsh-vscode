@@ -52,6 +52,7 @@ export interface SessionInfo {
   sessionId: string
   cwd?: string
   createdAt?: number
+  title?: string | null
   parentSession?: string
 }
 
@@ -133,6 +134,7 @@ export class HarnessRuntime {
   private started = false
   private closed = false
   private apiKey: string | undefined
+  private turnBusy = false
   private permissionMode: 'read-only' | 'workspace-write' | 'danger-full-access'
   private readonly listeners = new Set<(event: UiEvent) => void>()
 
@@ -263,7 +265,16 @@ export class HarnessRuntime {
       blocks.push({ type: 'text', text: `\n<attachment name="${file.name}">\n\`\`\`\n${file.content}\n\`\`\`\n</attachment>` })
     }
     this.emit({ type: 'status', status: 'busy' })
+    this.turnBusy = true
     await client.prompt(sessionId, blocks)
+  }
+
+  /** Cancel the running turn before switching conversations so nothing keeps
+   * burning tokens orphaned in the background. */
+  private async cancelRunningTurn(): Promise<void> {
+    if (!this.turnBusy) return
+    this.turnBusy = false
+    await this.cancel().catch(() => undefined)
   }
 
   /** Abort the active turn via the bridge's session/cancel method. */
@@ -285,6 +296,16 @@ export class HarnessRuntime {
   /** The active session id (client-side identity the runtime adopts). */
   currentSessionId(): string | undefined {
     return this.sessionId
+  }
+
+  /** The workspace folder this runtime is bound to (used to detect folder switches). */
+  workspacePath(): string {
+    return this.options.workspacePath
+  }
+
+  /** Whether dispose() has run; a disposed runtime must never be reused. */
+  isDisposed(): boolean {
+    return this.closed
   }
 
   /** List the LLM catalog the runtime's provider advertises. */
@@ -331,6 +352,7 @@ export class HarnessRuntime {
   /** Start a new conversation, optionally with a specific model or preset. */
   async newSession(model?: string, preset?: string): Promise<void> {
     await this.start()
+    await this.cancelRunningTurn()
     const client = this.client
     if (client === undefined) return
     const sessionId = `vscode-${randomUUID()}`
@@ -352,6 +374,7 @@ export class HarnessRuntime {
   /** Resume a persisted conversation by session id; returns its replayable transcript. */
   async resumeSession(sessionId: string): Promise<SessionEvent[]> {
     await this.start()
+    await this.cancelRunningTurn()
     const client = this.client
     if (client === undefined) return []
     await client.request('session/new', { sessionId }, 10_000)
@@ -483,9 +506,21 @@ export class HarnessRuntime {
       case 'step/start':
         this.emit({ type: 'status', status: 'busy' })
         return
-      case 'turn/end':
+      case 'turn/end': {
+        this.turnBusy = false
+        const reason = (event.data as { reason?: { kind?: string; error?: { message?: string } } }).reason
+        if (reason?.kind === 'error') {
+          const detail = typeof reason.error?.message === 'string'
+            ? reason.error.message
+            : 'The turn failed.'
+          // Close any open streaming block and surface the failure in-chat so
+          // the user is not left staring at an empty assistant reply.
+          this.emit({ type: 'assistantDone' })
+          this.emit({ type: 'systemMessage', text: `⚠ ${detail}` })
+        }
         this.emit({ type: 'status', status: 'idle' })
         return
+      }
       default:
         return
     }

@@ -2,8 +2,25 @@
     "name":  "dsh-vscode",
     "displayName":  "DeepSeek Harness for VS Code",
     "description":  "Run DeepSeek Harness inside VS Code: chat with the agent and edit your project, like Claude Code / Codex / Copilot.",
-    "version": "0.1.9",
+    "version": "0.2.0",
     "publisher":  "dsh-vscode",
+    "repository":  {
+                       "type":  "git",
+                       "url":  "https://github.com/kindle1126/dsh-vscode.git"
+                   },
+    "homepage":  "https://github.com/kindle1126/dsh-vscode#readme",
+    "bugs":  {
+                 "url":  "https://github.com/kindle1126/dsh-vscode/issues"
+             },
+    "keywords":  [
+                     "deepseek",
+                     "harness",
+                     "ai",
+                     "agent",
+                     "coding-assistant",
+                     "claude-code",
+                     "copilot"
+                 ],
     "license":  "MIT",
     "engines":  {
                     "vscode":  "^1.90.0"
