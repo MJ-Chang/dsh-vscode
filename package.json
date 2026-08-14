@@ -110,7 +110,10 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "package": "npm run build && npx @vscode/vsce package",
-    "test:runtime": "node scripts/smoke-runtime.mjs"
+    "test:runtime": "node scripts/smoke-runtime.mjs",
+    "test:webview": "node scripts/test-webview.mjs",
+    "test:activate": "node scripts/test-activate.mjs",
+    "test": "npm run test:webview && npm run test:activate"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -166,6 +169,7 @@
     "@types/node": "^22.10.0",
     "@types/vscode": "^1.90.0",
     "esbuild": "^0.24.0",
+    "jsdom": "^29.1.1",
     "typescript": "^5.6.0"
   }
 }

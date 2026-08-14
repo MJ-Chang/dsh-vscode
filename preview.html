@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-preview'; img-src 'unsafe-inline' data:;">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeepSeek Harness</title>
+  <style>
+/* dsh-vscode chat — visual system extracted from Claude Code's webview CSS:
+   clay/orange accents (#c6613f / #d97757), ivory text, 4px pills, monospace
+   input (prompt-editor feel), VS Code theme variables for surfaces. */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--vscode-sideBar-background);
+  color: var(--vscode-foreground);
+  font-family: var(--vscode-chat-font-family, var(--vscode-font-family, system-ui, sans-serif));
+  font-size: var(--vscode-font-size, 13px);
+  line-height: 1.55;
+}
+
+body { display: flex; flex-direction: column; }
+.screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.screen[hidden] { display: none; }
+
+/* Claude Code palette */
+:root {
+  --clay: #c6613f;
+  --clay-hover: #d97757;
+  --clay-ivory: #faf9f5;
+  --pill-radius: 4px;
+  --pill-padding: 4px;
+  --mono: var(--vscode-editor-font-family, Consolas, monospace);
+  --mono-size: var(--vscode-editor-font-size, 12px);
+}
+
+/* ============ SETUP ============ */
+
+#setup { align-items: center; justify-content: center; padding: 24px; overflow-y: auto; }
+.setup-card { width: 100%; max-width: 330px; display: flex; flex-direction: column; gap: 8px; }
+.logo {
+  width: 52px; height: 52px; border-radius: 13px;
+  background: linear-gradient(135deg, var(--clay), #8a4a2e);
+  color: var(--clay-ivory);
+  font-weight: 700; font-size: 16px; letter-spacing: 0.5px;
+  display: flex; align-items: center; justify-content: center; margin-bottom: 10px;
+}
+.setup-title { margin: 0; font-size: 19px; font-weight: 650; }
+.setup-subtitle { margin: 0 0 14px; color: var(--vscode-descriptionForeground); font-size: 13px; }
+.field-label { font-size: 12px; color: var(--vscode-descriptionForeground); }
+.key-input {
+  width: 100%;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: var(--pill-radius);
+  padding: 9px 12px;
+  font: inherit;
+  font-family: var(--mono);
+}
+.key-input:focus { outline: 1px solid var(--vscode-focusBorder); }
+.connect-btn {
+  margin-top: 4px;
+  background: var(--clay);
+  color: var(--clay-ivory);
+  border: none;
+  border-radius: var(--pill-radius);
+  padding: 10px 14px;
+  font: inherit; font-weight: 600; cursor: pointer;
+}
+.connect-btn:hover { background: var(--clay-hover); }
+.connect-btn:disabled { opacity: 0.6; cursor: default; }
+.setup-error { color: var(--vscode-errorForeground); font-size: 12.5px; margin: 6px 0 0; }
+.setup-hint { margin: 10px 0 0; color: var(--vscode-descriptionForeground); font-size: 12px; opacity: 0.85; }
+.setup-hint code {
+  font-family: var(--mono);
+  background: var(--vscode-textCodeBlock-background);
+  padding: 1px 5px; border-radius: 4px;
+}
+
+/* ============ HEADER ============ */
+
+#header {
+  flex: none;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(128,128,128,0.3));
+}
+.header-main { display: flex; align-items: center; gap: 10px; }
+.workspace {
+  flex: 1;
+  font-size: 12.5px; font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.status {
+  font-size: 10.5px; padding: 2px 9px; border-radius: 999px;
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  text-transform: capitalize; white-space: nowrap;
+  color: var(--vscode-descriptionForeground);
+}
+.status-idle  { color: var(--vscode-testing-iconPassed, #89d185); border-color: currentColor; }
+.status-busy  { color: var(--vscode-testing-iconQueued, #cca700); border-color: currentColor; }
+.status-error { color: var(--vscode-errorForeground, #f14c4c); border-color: currentColor; }
+.status-starting, .status-ready, .status-stopped { color: var(--vscode-descriptionForeground); }
+
+/* ============ MESSAGES ============ */
+
+.messages { flex: 1; overflow-y: auto; padding: 12px 14px; }
+
+.message-container { margin-bottom: 14px; }
+
+.msg-label {
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 4px;
+}
+
+.msg.user { white-space: pre-wrap; word-wrap: break-word; }
+.msg.assistant { word-wrap: break-word; }
+
+.msg.assistant.streaming::after {
+  content: "▍";
+  animation: blink 1s step-start infinite;
+  color: var(--clay);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.msg.system {
+  font-size: 12px;
+  color: var(--vscode-descriptionForeground);
+  border: 1px dashed var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-bottom: 14px;
+}
+
+.msg code, .tool-card code {
+  font-family: var(--mono);
+  font-size: calc(var(--mono-size) - 0px);
+  background: var(--vscode-textCodeBlock-background);
+  padding: 1px 5px; border-radius: 4px;
+}
+.msg pre {
+  background: var(--vscode-textCodeBlock-background);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: var(--pill-radius);
+  padding: 10px 12px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+.msg pre code { background: none; padding: 0; }
+.msg ul, .msg ol { margin: 6px 0; padding-left: 22px; }
+.msg li { margin: 3px 0; }
+.msg h1, .msg h2, .msg h3, .msg h4 { margin: 12px 0 6px; font-size: 1.05em; }
+.msg a { color: var(--vscode-textLink-foreground); }
+.msg table { border-collapse: collapse; margin: 8px 0; }
+.msg th, .msg td { border: 1px solid var(--vscode-input-border, var(--vscode-widget-border)); padding: 4px 10px; }
+
+/* ---------- tool cards ---------- */
+
+.tool-card {
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: var(--pill-radius);
+  background: var(--vscode-editorWidget-background);
+  font-size: 12.5px;
+  margin-top: 6px;
+}
+.tool-card summary {
+  cursor: pointer; padding: 7px 12px;
+  display: flex; align-items: center; gap: 8px;
+  user-select: none; list-style: none;
+}
+.tool-card summary::-webkit-details-marker { display: none; }
+.tool-card summary::before { content: "▸"; color: var(--vscode-descriptionForeground); }
+.tool-card[open] summary::before { content: "▾"; }
+.tool-name { font-family: var(--mono); font-weight: 600; font-size: 12px; }
+.tool-state { margin-left: auto; color: var(--vscode-descriptionForeground); }
+.tool-state.ok { color: var(--vscode-testing-iconPassed, #89d185); }
+.tool-state.err { color: var(--vscode-errorForeground, #f14c4c); }
+.tool-body { border-top: 1px solid var(--vscode-widget-border); padding: 8px 12px; max-height: 240px; overflow: auto; }
+.tool-args, .tool-result {
+  white-space: pre-wrap; word-wrap: break-word;
+  font-family: var(--mono);
+  font-size: calc(var(--mono-size) - 1px);
+  color: var(--vscode-descriptionForeground);
+}
+.tool-result { margin-top: 8px; color: var(--vscode-foreground); }
+
+/* ============ COMPOSER ============ */
+
+#composer {
+  flex: none;
+  border-top: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(128,128,128,0.3));
+  padding: 10px 12px 10px;
+  display: flex; flex-direction: column; gap: 8px;
+}
+
+#input {
+  width: 100%;
+  resize: vertical;
+  min-height: 48px; max-height: 220px;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: var(--pill-radius);
+  padding: 10px 12px;
+  font: inherit;
+  font-family: var(--mono);
+  font-size: var(--mono-size);
+  line-height: 1.5;
+}
+#input:focus { outline: 1px solid var(--vscode-focusBorder); }
+#input:disabled { opacity: 0.5; }
+
+.composer-bar { display: flex; align-items: center; gap: 6px; }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: var(--pill-radius);
+  padding: 5px 10px;
+  font: inherit; font-size: 11.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pill:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.pill-value { opacity: 0.75; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
+
+.spacer { flex: 1; }
+
+.send-btn {
+  background: var(--clay);
+  color: var(--clay-ivory);
+  border: none;
+  border-radius: var(--pill-radius);
+  padding: 6px 16px;
+  font: inherit; font-size: 12px; font-weight: 600;
+  cursor: pointer;
+}
+.send-btn:hover:not(:disabled) { background: var(--clay-hover); }
+.send-btn:disabled { opacity: 0.45; cursor: default; }
+.send-btn.stop { background: var(--vscode-inputValidation-errorBackground, #8a2e2e); }
+
+/* ============ MENUS ============ */
+
+.menu-layer { position: relative; flex: none; }
+.menu {
+  position: absolute;
+  bottom: 4px;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: var(--pill-radius);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+.menu-item {
+  padding: 7px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.menu-item:hover { background: var(--vscode-list-hoverBackground); }
+.menu-item.selected { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+.menu-item-label { font-size: 12.5px; font-weight: 550; display: flex; align-items: center; gap: 8px; }
+.menu-item-label .check { margin-left: auto; color: var(--clay); }
+.menu-item-desc { font-size: 11px; color: var(--vscode-descriptionForeground); }
+
+/* scrollbars */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground); }
+
+</style>
+</head>
+<body>
+
+  <!-- ============ SETUP ============ -->
+  <section id="setup" class="screen">
+    <div class="setup-card">
+      <div class="logo">DSH</div>
+      <h1 class="setup-title">DeepSeek Harness</h1>
+      <p class="setup-subtitle">A coding agent in your editor, powered by DeepSeek Harness.</p>
+      <label class="field-label" for="key-input">API Key</label>
+      <input id="key-input" type="password" class="key-input" placeholder="sk-…" autocomplete="off" spellcheck="false" autofocus>
+      <button id="connect-btn" class="connect-btn">Connect</button>
+      <p id="setup-error" class="setup-error" hidden></p>
+      <p class="setup-hint">Stored in VS Code secret storage. Or set <code>DEEPSEEK_API_KEY</code> / workspace <code>.env</code>.</p>
+    </div>
+  </section>
+
+  <!-- ============ CHAT ============ -->
+  <section id="chat" class="screen" hidden>
+    <header id="header">
+      <div class="header-main">
+        <span id="workspace" class="workspace"></span>
+        <span id="status" class="status status-idle">idle</span>
+      </div>
+    </header>
+
+    <main id="messages" class="messages" aria-live="polite"></main>
+
+    <!-- popup menus (positioned above the composer) -->
+    <div id="menu-layer" class="menu-layer" hidden>
+      <div id="model-menu" class="menu" hidden></div>
+      <div id="mode-menu" class="menu" hidden></div>
+    </div>
+
+    <footer id="composer">
+      <textarea id="input" rows="2" placeholder="Ask to read, write, or change your project… (Enter to send)"
+                aria-label="Message"></textarea>
+      <div class="composer-bar">
+        <button id="model-btn" class="pill" title="Model">model <span id="model-name" class="pill-value"></span></button>
+        <button id="mode-btn" class="pill" title="Permission mode">mode <span id="mode-name" class="pill-value"></span></button>
+        <span class="spacer"></span>
+        <button id="history-btn" class="pill" title="History">history ▾</button>
+        <button id="send-btn" class="send-btn" title="Send">Send</button>
+      </div>
+    </footer>
+  </section>
+
+  <script>
+/**
+ * dsh-vscode chat webview — layout and interactions modeled on Claude Code's
+ * VS Code extension: setup screen, message containers, model & permission
+ * mode menus, history, streaming assistant text, tool cards.
+ */
+(() => {
+  'use strict'
+
+  const vscode = acquireVsCodeApi()
+
+  const setupEl = document.getElementById('setup')
+  const chatEl = document.getElementById('chat')
+  const keyInput = document.getElementById('key-input')
+  const connectBtn = document.getElementById('connect-btn')
+  const setupError = document.getElementById('setup-error')
+
+  const messagesEl = document.getElementById('messages')
+  const inputEl = document.getElementById('input')
+  const sendBtn = document.getElementById('send-btn')
+  const statusEl = document.getElementById('status')
+  const workspaceEl = document.getElementById('workspace')
+  const modelBtn = document.getElementById('model-btn')
+  const modelName = document.getElementById('model-name')
+  const modeBtn = document.getElementById('mode-btn')
+  const modeName = document.getElementById('mode-name')
+  const historyBtn = document.getElementById('history-btn')
+  const menuLayer = document.getElementById('menu-layer')
+  const modelMenu = document.getElementById('model-menu')
+  const modeMenu = document.getElementById('mode-menu')
+
+  const MODE_LABELS = {
+    'read-only': 'Read-only',
+    'workspace-write': 'Workspace',
+    'danger-full-access': 'Full access',
+  }
+
+  let status = 'starting'
+  let busy = false
+  let assistantContainer = null
+  let assistantBlock = null
+  let assistantText = ''
+  let currentModel = ''
+  let currentMode = 'workspace-write'
+  let modelCatalog = []
+  const toolCards = new Map()
+
+  // ---------- utils ----------
+
+  const escapeHtml = (text) =>
+    text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+
+  function renderMarkdown(text) {
+    const parts = []
+    const fence = /```([\w+-]*)\n?([\s\S]*?)```/g
+    let last = 0
+    let match
+    while ((match = fence.exec(text)) !== null) {
+      parts.push(renderBlock(text.slice(last, match.index)))
+      const lang = match[1]
+      const code = escapeHtml(match[2].replace(/\n$/, ''))
+      parts.push(lang ? `<pre><code data-lang="${escapeHtml(lang)}">${code}</code></pre>`
+                      : `<pre><code>${code}</code></pre>`)
+      last = fence.lastIndex
+    }
+    parts.push(renderBlock(text.slice(last)))
+    return parts.join('')
+  }
+
+  function renderInline(text) {
+    const escaped = escapeHtml(text)
+    return escaped
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|\s)\*([^*\n]+)\*(?=\s|$)/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
+  }
+
+  function renderBlock(text) {
+    const lines = text.split('\n')
+    const out = []
+    let inList = false
+    for (const line of lines) {
+      const heading = line.match(/^(#{1,4})\s+(.*)$/)
+      if (heading) {
+        if (inList) { out.push('</ul>'); inList = false }
+        out.push(`<h${heading[1].length}>${renderInline(heading[2])}</h${heading[1].length}>`)
+        continue
+      }
+      const bullet = line.match(/^\s*[-*]\s+(.*)$/)
+      if (bullet) {
+        if (!inList) { out.push('<ul>'); inList = true }
+        out.push(`<li>${renderInline(bullet[1])}</li>`)
+        continue
+      }
+      if (/^\s*$/.test(line)) {
+        if (inList) { out.push('</ul>'); inList = false }
+        out.push('<br>')
+        continue
+      }
+      if (inList) { out.push('</ul>'); inList = false }
+      out.push(renderInline(line))
+    }
+    if (inList) out.push('</ul>')
+    return out.join('')
+  }
+
+  function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight }
+
+  function addContainer(label) {
+    const container = document.createElement('div')
+    container.className = 'message-container'
+    if (label) {
+      const labelEl = document.createElement('div')
+      labelEl.className = 'msg-label'
+      labelEl.textContent = label
+      container.appendChild(labelEl)
+    }
+    messagesEl.appendChild(container)
+    scrollToBottom()
+    return container
+  }
+
+  function addMessageEl(className, html, container) {
+    const el = document.createElement('div')
+    el.className = `msg ${className}`
+    el.innerHTML = html
+    ;(container ?? messagesEl).appendChild(el)
+    scrollToBottom()
+    return el
+  }
+
+  // ---------- screens ----------
+
+  function showSetup(message) {
+    chatEl.hidden = true
+    setupEl.hidden = false
+    if (message) {
+      setupError.textContent = message
+      setupError.hidden = false
+    }
+    keyInput.focus()
+  }
+
+  function showChat() {
+    setupEl.hidden = true
+    chatEl.hidden = false
+    inputEl.focus()
+  }
+
+  // ---------- status ----------
+
+  function setStatus(next) {
+    status = next
+    statusEl.textContent = next
+    statusEl.className = `status status-${next}`
+    busy = next === 'busy' || next === 'starting'
+    sendBtn.disabled = next === 'starting' || next === 'error'
+    sendBtn.textContent = busy ? 'Stop' : 'Send'
+    sendBtn.classList.toggle('stop', busy)
+    inputEl.disabled = next === 'starting'
+  }
+
+  // ---------- menus ----------
+
+  function closeMenus() {
+    modelMenu.hidden = true
+    modeMenu.hidden = true
+    menuLayer.hidden = true
+  }
+
+  function renderMenu(menuEl, items, selectedValue, onPick) {
+    menuEl.replaceChildren()
+    for (const item of items) {
+      const row = document.createElement('div')
+      row.className = `menu-item${item.value === selectedValue ? ' selected' : ''}`
+      const label = document.createElement('div')
+      label.className = 'menu-item-label'
+      label.innerHTML = `${escapeHtml(item.label)}${item.value === selectedValue ? '<span class="check">✓</span>' : ''}`
+      row.appendChild(label)
+      if (item.description) {
+        const desc = document.createElement('div')
+        desc.className = 'menu-item-desc'
+        desc.textContent = item.description
+        row.appendChild(desc)
+      }
+      row.addEventListener('click', () => {
+        closeMenus()
+        onPick(item.value)
+      })
+      menuEl.appendChild(row)
+    }
+  }
+
+  function openMenu(menuEl) {
+    closeMenus()
+    menuEl.hidden = false
+    menuLayer.hidden = false
+  }
+
+  modelBtn.addEventListener('click', () => {
+    renderMenu(modelMenu, modelCatalog.length > 0 ? modelCatalog.map((m) => ({
+      value: m.id,
+      label: m.name ?? m.id,
+      description: m.description ?? '',
+    })) : [{ value: currentModel, label: currentModel, description: '' }], currentModel, (model) => {
+      if (model !== currentModel) {
+        currentModel = model
+        modelName.textContent = model
+        addMessageEl('system', `New conversation · model: ${model}`)
+        vscode.postMessage({ type: 'setModel', text: model })
+      }
+    })
+    openMenu(modelMenu)
+  })
+
+  modeBtn.addEventListener('click', () => {
+    renderMenu(modeMenu, Object.entries(MODE_LABELS).map(([value, label]) => ({
+      value,
+      label,
+      description: value === 'read-only' ? 'The agent can only read files.'
+        : value === 'workspace-write' ? 'Can edit files inside the workspace.'
+          : 'Full filesystem access (use with care).',
+    })), currentMode, (mode) => {
+      if (mode !== currentMode) {
+        currentMode = mode
+        modeName.textContent = MODE_LABELS[mode]
+        vscode.postMessage({ type: 'setMode', text: mode })
+      }
+    })
+    openMenu(modeMenu)
+  })
+
+  historyBtn.addEventListener('click', () => {
+    closeMenus()
+    vscode.postMessage({ type: 'listSessions' })
+  })
+
+  document.addEventListener('click', (event) => {
+    if (!event.target.closest('.menu')) closeMenus()
+  })
+
+  // ---------- host events ----------
+
+  function onState({ configured, model, workspace, mode }) {
+    currentModel = model
+    currentMode = mode ?? 'workspace-write'
+    modelName.textContent = model
+    modeName.textContent = MODE_LABELS[currentMode]
+    workspaceEl.textContent = workspace || 'no workspace'
+    if (configured) {
+      showChat()
+      setStatus('starting')
+    } else {
+      showSetup()
+    }
+  }
+
+  function onConfigured() {
+    showChat()
+    setStatus('ready')
+    vscode.postMessage({ type: 'listSessions' })
+  }
+
+  function onModels({ models }) {
+    modelCatalog = Array.isArray(models) ? models : []
+    if (modelCatalog.length > 0 && modelCatalog.some((m) => m.id === currentModel)) {
+      // keep current selection
+    } else if (modelCatalog.length > 0) {
+      currentModel = modelCatalog[0].id
+      modelName.textContent = currentModel
+    }
+  }
+
+  function onSessions({ sessions }) {
+    const list = Array.isArray(sessions) ? sessions : []
+    if (list.length === 0) {
+      addMessageEl('system', 'No previous conversations yet.')
+      return
+    }
+    const container = addContainer('HISTORY')
+    for (const session of list) {
+      const row = document.createElement('div')
+      row.className = 'menu-item'
+      const label = document.createElement('div')
+      label.className = 'menu-item-label'
+      label.textContent = `${session.createdAt ? new Date(session.createdAt).toLocaleString() : 'unknown'} · ${session.sessionId.slice(0, 10)}`
+      row.appendChild(label)
+      row.addEventListener('click', () => {
+        container.remove()
+        addMessageEl('system', 'Resuming previous conversation…')
+        vscode.postMessage({ type: 'resumeSession', text: session.sessionId })
+      })
+      container.appendChild(row)
+    }
+  }
+
+  function onSystemMessage({ text }) {
+    addMessageEl('system', escapeHtml(text))
+  }
+
+  function onAssistantDelta({ text }) {
+    if (assistantBlock === null) {
+      assistantContainer = addContainer('ASSISTANT')
+      assistantBlock = addMessageEl('assistant streaming', '', assistantContainer)
+      assistantText = ''
+    }
+    assistantText += text
+    assistantBlock.innerHTML = renderMarkdown(assistantText)
+    assistantBlock.classList.add('streaming')
+    scrollToBottom()
+  }
+
+  function onAssistantDone() {
+    if (assistantBlock !== null) assistantBlock.classList.remove('streaming')
+    assistantBlock = null
+    assistantContainer = null
+    assistantText = ''
+  }
+
+  function onToolCall({ callId, name, args }) {
+    let prettyArgs = args
+    try { prettyArgs = JSON.stringify(JSON.parse(args), null, 2) } catch { /* keep raw */ }
+
+    const card = document.createElement('details')
+    card.className = 'tool-card'
+    card.open = true
+
+    const summary = document.createElement('summary')
+    const nameEl = document.createElement('span')
+    nameEl.className = 'tool-name'
+    nameEl.textContent = name
+    const stateEl = document.createElement('span')
+    stateEl.className = 'tool-state'
+    stateEl.textContent = 'running…'
+    summary.append(nameEl, stateEl)
+
+    const body = document.createElement('div')
+    body.className = 'tool-body'
+    const argsEl = document.createElement('div')
+    argsEl.className = 'tool-args'
+    argsEl.textContent = prettyArgs
+    const resultEl = document.createElement('div')
+    resultEl.className = 'tool-result'
+    resultEl.style.display = 'none'
+    body.append(argsEl, resultEl)
+
+    card.append(summary, body)
+    messagesEl.appendChild(card)
+    scrollToBottom()
+
+    toolCards.set(callId, { name, card, stateEl, resultEl })
+  }
+
+  function onToolResult({ callId, name, ok, summary }) {
+    const record = toolCards.get(callId)
+    if (record !== undefined) {
+      record.stateEl.textContent = ok ? 'ok' : 'error'
+      record.stateEl.classList.toggle('ok', ok)
+      record.stateEl.classList.toggle('err', !ok)
+      if (summary !== '') {
+        record.resultEl.textContent = summary
+        record.resultEl.style.display = 'block'
+      }
+    } else {
+      const text = `${ok ? '✓' : '✗'} ${name}${summary !== '' ? ` — ${summary}` : ''}`
+      addMessageEl('system', escapeHtml(text))
+    }
+  }
+
+  function onError({ message }) {
+    onAssistantDone()
+    if (setupEl.hidden === false) {
+      showSetup(message)
+      connectBtn.disabled = false
+    } else {
+      addMessageEl('system', escapeHtml(`⚠ ${message}`))
+      setStatus('error')
+    }
+  }
+
+  function onClear() {
+    messagesEl.replaceChildren()
+    toolCards.clear()
+    onAssistantDone()
+    setStatus('idle')
+  }
+
+  window.addEventListener('message', (event) => {
+    const message = event.data
+    switch (message.type) {
+      case 'state': onState(message); break
+      case 'configured': onConfigured(); break
+      case 'models': onModels(message); break
+      case 'sessions': onSessions(message); break
+      case 'status': setStatus(message.status); break
+      case 'systemMessage': onSystemMessage(message); break
+      case 'assistantDelta': onAssistantDelta(message); break
+      case 'assistantDone': onAssistantDone(); break
+      case 'toolCall': onToolCall(message); break
+      case 'toolResult': onToolResult(message); break
+      case 'error': onError(message); break
+      case 'clear': onClear(); break
+      default: break
+    }
+  })
+
+  // ---------- user actions ----------
+
+  async function connect() {
+    const key = keyInput.value.trim()
+    if (key === '') return
+    connectBtn.disabled = true
+    setupError.hidden = true
+    vscode.postMessage({ type: 'setupKey', text: key })
+  }
+
+  connectBtn.addEventListener('click', connect)
+  keyInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); void connect() }
+  })
+
+  function send() {
+    if (busy) {
+      vscode.postMessage({ type: 'stop' })
+      return
+    }
+    const text = inputEl.value.trim()
+    if (text === '') return
+    inputEl.value = ''
+    inputEl.style.height = 'auto'
+    const container = addContainer('YOU')
+    addMessageEl('user', escapeHtml(text), container)
+    vscode.postMessage({ type: 'prompt', text })
+  }
+
+  sendBtn.addEventListener('click', send)
+  inputEl.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault()
+      send()
+    }
+  })
+
+  vscode.postMessage({ type: 'ready' })
+})()
+
+window.acquireVsCodeApi = function () {
+  return { postMessage: function (m) { console.log(JSON.stringify(m)) }, getState: function () {}, setState: function () {} }
+}
+var tick = function (ms) { return new Promise(function (r) { setTimeout(r, ms) }) }
+var host = function (data) { window.postMessage(data, "*") }
+var run = async function () {
+  await tick(300)
+  host({ type: "state", configured: true, model: "deepseek-v4-flash", workspace: "my-project", mode: "workspace-write" })
+  await tick(200)
+  host({ type: "models", models: [
+    { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", description: "Fast, efficient coding" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", description: "Deep reasoning, best quality" },
+  ]})
+  await tick(200)
+  host({ type: "status", status: "idle" })
+  document.getElementById("input").value = "Add a function that parses JSON lines from a file."
+  document.getElementById("send-btn").click()
+  await tick(300)
+  var block = [
+    "I will add a parseJsonLines function. First let me look at the project:",
+    "",
+    "```js",
+    "export function parseJsonLines(text) {",
+    "  const lines = text.split(/\\r?\\n/).filter(Boolean)",
+    "  return lines.map((line) => JSON.parse(line))",
+    "}",
+    "```",
+    "",
+    "Now let me verify it with the test suite.",
+  ].join("\n")
+  host({ type: "toolCall", callId: "c1", name: "grep", args: "{\"pattern\":\"parseJsonLines\",\"path\":\"./src\"}" })
+  await tick(300)
+  host({ type: "toolResult", callId: "c1", name: "grep", ok: true, summary: "src/parser.js:3: export function parseJsonLines" })
+  var pieces = block.split("\n")
+  for (var i = 0; i < pieces.length; i++) { host({ type: "assistantDelta", text: pieces[i] + "\n" }); await tick(80) }
+  host({ type: "assistantDone" })
+  host({ type: "toolCall", callId: "c2", name: "write", args: "{\"path\":\"./src/parser.js\"}" })
+  await tick(300)
+  host({ type: "toolResult", callId: "c2", name: "write", ok: true, summary: "Wrote 14 lines to src/parser.js" })
+  await tick(200)
+  host({ type: "status", status: "idle" })
+}
+run()
+</script>
+</body>
+</html>
