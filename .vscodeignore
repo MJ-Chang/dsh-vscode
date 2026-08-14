@@ -12,3 +12,6 @@ scripts/**
 .smoke-workspace/**
 smoke-output.txt
 *.vsix
+.test-*/
+.smoke-*/
+.test-*

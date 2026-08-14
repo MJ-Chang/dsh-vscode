@@ -1,8 +1,0 @@
-- id: dsh-base
-  name: cordis:include
-  config:
-    path: file:///C:/Users/iamyt/Documents/Deepseek/dsh-vscode/runtime/cordis.yml
-- id: dsh-user-plugins
-  name: cordis:include
-  config:
-    path: file:///C:/Users/iamyt/Documents/Deepseek/dsh-vscode/.test-storage7/runtime-plugins/user.cordis.yml

@@ -8,3 +8,6 @@ runtime/.sessions/
 .smoke-sessions/
 .smoke-workspace/
 smoke-output.txt
+.test-*/
+.smoke-*/
+
