@@ -98,15 +98,20 @@ export function resolveRuntimeNode(): string {
   if (process.platform !== 'win32') return process.execPath
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { existsSync } = require('node:fs') as typeof import('node:fs')
-  const candidates: string[] = []
-  if (process.env.npm_node_execpath !== undefined) candidates.push(process.env.npm_node_execpath)
+  const candidates: string[] = [
+    'C:\\Program Files\\nodejs\\node.exe',
+    'C:\\Program Files (x86)\\nodejs\\node.exe',
+  ]
   for (const dir of (process.env.Path ?? '').split(';')) {
     if (dir !== '') candidates.push(path.join(dir.trim(), 'node.exe'))
   }
-  candidates.push(
-    'C:\\Program Files\\nodejs\\node.exe',
-    'C:\\Program Files (x86)\\nodejs\\node.exe',
-  )
+  // npm_node_execpath is unreliable under pnpm shims (it can point at pnpm's
+  // exe); only accept a real node.exe outside a package-manager store.
+  const npmNode = process.env.npm_node_execpath
+  if (npmNode !== undefined && /node\.exe$/i.test(npmNode)
+    && !/pnpm|\.pnpm|npm-cache|_store/i.test(npmNode)) {
+    candidates.unshift(npmNode)
+  }
   for (const candidate of candidates) {
     if (candidate !== undefined && candidate !== '' && existsSync(candidate)
       && !candidate.toLowerCase().includes('microsoft vs code')) {
@@ -253,9 +258,13 @@ export class HarnessRuntime {
         model: this.options.model,
       })
     } catch (error) {
-      this.emit({ type: 'status', status: 'error', detail: errorMessage(error) })
+      const detail = errorMessage(error)
+      this.emit({ type: 'status', status: 'error', detail })
       await client.close().catch(() => undefined)
-      throw new Error(`failed to start the DeepSeek Harness runtime: ${errorMessage(error)}`)
+      const hint = /require|pnpm|npm/.test(detail)
+        ? ' The runtime node executable could not be launched — make sure Node.js is installed (node --version works in a terminal), then reload the window.'
+        : ''
+      throw new Error(`failed to start the DeepSeek Harness runtime: ${detail}${hint}`)
     }
     this.client = client
     this.started = true
