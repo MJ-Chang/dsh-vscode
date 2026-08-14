@@ -21,6 +21,14 @@ npm run test:runtime   # harness runtime smoke test (no API key required)
 
 The CI runs all of the above on Windows and Linux. Please run them locally first.
 
+## Packaging
+
+```sh
+npm run package   # builds dist/extension.js and produces dsh-vscode-<version>.vsix
+```
+
+The vsix bundles the complete harness runtime (`node_modules` + `runtime/` + `presets/`). Publishing to the VS Code Marketplace, Open VSX, or GitHub Releases is documented step by step in [PUBLISHING.md](PUBLISHING.md).
+
 ## Pull requests
 
 - Keep changes focused; describe what and why in the PR body.
