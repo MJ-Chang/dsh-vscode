@@ -4,6 +4,7 @@
     "description":  "Run DeepSeek Harness inside VS Code: chat with the agent and edit your project, like Claude Code / Codex / Copilot.",
     "version": "0.2.0",
     "publisher":  "dsh-vscode",
+    "icon":  "media/icon.png",
     "repository":  {
                        "type":  "git",
                        "url":  "https://github.com/kindle1126/dsh-vscode.git"
