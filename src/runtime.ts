@@ -197,7 +197,14 @@ export class HarnessRuntime {
     }
     const client = new sdk.HarnessClient({
       command: process.execPath,
-      args: [bin, configPath],
+      // The preload hides console windows for the runtime's own shell spawns
+      // on Windows (the extension host is a GUI process).
+      args: [
+        '--require',
+        path.join(this.options.extensionPath, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/'),
+        bin,
+        configPath,
+      ],
       cwd: this.options.workspacePath,
       env: childEnv,
       shutdownTimeoutMs: 1000,

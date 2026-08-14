@@ -9,6 +9,11 @@ import * as vscode from 'vscode'
 import { CHAT_VIEW_ID, CHAT_VIEW_ID_SECONDARY, ChatViewProvider } from './chatView'
 import { installPlugin, listPlugins, removePlugin, type PluginPaths } from './plugins'
 import { HarnessRuntime } from './runtime'
+import { applyWindowsSpawnPatch } from './spawn-patch'
+
+// Hide console windows for every child spawn on Windows (the extension host
+// is a GUI process; the SDK client's runtime spawn would otherwise flash).
+applyWindowsSpawnPatch()
 
 const API_KEY_SECRET = 'dshVscode.apiKey'
 

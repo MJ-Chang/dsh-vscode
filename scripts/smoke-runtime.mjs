@@ -29,7 +29,8 @@ await mkdir(sessions, { recursive: true })
 
 const client = new HarnessClient({
   command: process.execPath,
-  args: [bin, config],
+  // Same launch shape as the extension: preload hides Windows console windows.
+  args: ['--require', path.join(root, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/'), bin, config],
   cwd: workspace,
   env: {
     ...process.env,
