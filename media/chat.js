@@ -1,6 +1,6 @@
 /**
- * dsh-vscode chat webview: setup screen (API key) + chat screen, renders the
- * harness event stream, and forwards user actions to the extension host.
+ * dsh-vscode chat webview: setup screen (API key), model + history selectors,
+ * streaming chat, tool cards.
  */
 (() => {
   'use strict'
@@ -19,13 +19,16 @@
   const stopBtn = document.getElementById('stop')
   const newSessionBtn = document.getElementById('new-session')
   const statusEl = document.getElementById('status')
-  const modelEl = document.getElementById('model')
+  const modelSelect = document.getElementById('model-select')
+  const historySelect = document.getElementById('history-select')
   const workspaceEl = document.getElementById('workspace')
 
   let status = 'starting'
   let busy = false
   let assistantBlock = null
   let assistantText = ''
+  let currentModel = ''
+  let sessionsCache = []
   const toolCards = new Map()
 
   // ---------- utilities ----------
@@ -34,21 +37,20 @@
     text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
-  /** Minimal, safe markdown: fenced code, inline code, bold, italic, links, lists, headings. */
   function renderMarkdown(text) {
     const parts = []
     const fence = /```([\w+-]*)\n?([\s\S]*?)```/g
     let last = 0
     let match
     while ((match = fence.exec(text)) !== null) {
-      parts.push(renderInline(text.slice(last, match.index)))
+      parts.push(renderBlock(text.slice(last, match.index)))
       const lang = match[1]
       const code = escapeHtml(match[2].replace(/\n$/, ''))
       parts.push(lang ? `<pre><code data-lang="${escapeHtml(lang)}">${code}</code></pre>`
                       : `<pre><code>${code}</code></pre>`)
       last = fence.lastIndex
     }
-    parts.push(renderInline(text.slice(last)))
+    parts.push(renderBlock(text.slice(last)))
     return parts.join('')
   }
 
@@ -69,8 +71,7 @@
       const heading = line.match(/^(#{1,4})\s+(.*)$/)
       if (heading) {
         if (inList) { out.push('</ul>'); inList = false }
-        const level = heading[1].length
-        out.push(`<h${level}>${renderInline(heading[2])}</h${level}>`)
+        out.push(`<h${heading[1].length}>${renderInline(heading[2])}</h${heading[1].length}>`)
         continue
       }
       const bullet = line.match(/^\s*[-*]\s+(.*)$/)
@@ -132,14 +133,65 @@
     inputEl.disabled = next === 'starting'
   }
 
+  // ---------- model + history ----------
+
+  function onModels({ models }) {
+    const previous = modelSelect.value
+    modelSelect.replaceChildren()
+    if (!Array.isArray(models) || models.length === 0) {
+      const option = document.createElement('option')
+      option.value = currentModel
+      option.textContent = currentModel || 'deepseek-v4-flash'
+      modelSelect.appendChild(option)
+      return
+    }
+    for (const model of models) {
+      const option = document.createElement('option')
+      option.value = model.id
+      option.textContent = model.name ?? model.id
+      modelSelect.appendChild(option)
+    }
+    if (previous !== '' && [...modelSelect.options].some((o) => o.value === previous)) {
+      modelSelect.value = previous
+    }
+    currentModel = modelSelect.value
+  }
+
+  function formatWhen(createdAt) {
+    if (typeof createdAt !== 'number') return 'unknown time'
+    const diff = Date.now() - createdAt
+    if (diff < 60_000) return 'just now'
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+    return `${Math.floor(diff / 86_400_000)}d ago`
+  }
+
+  function onSessions({ sessions }) {
+    sessionsCache = Array.isArray(sessions) ? sessions : []
+    const previous = historySelect.value
+    historySelect.replaceChildren()
+    const fresh = document.createElement('option')
+    fresh.value = ''
+    fresh.textContent = 'New conversation'
+    historySelect.appendChild(fresh)
+    for (const session of sessionsCache) {
+      const option = document.createElement('option')
+      option.value = session.sessionId
+      option.textContent = `${formatWhen(session.createdAt)} · ${session.sessionId.slice(0, 8)}`
+      historySelect.appendChild(option)
+    }
+    historySelect.value = previous
+  }
+
   // ---------- events ----------
 
   function onState({ configured, model, workspace }) {
-    modelEl.textContent = model
+    currentModel = model
     workspaceEl.textContent = workspace
     if (configured) {
       showChat()
       setStatus('starting')
+      vscode.postMessage({ type: 'listSessions' })
     } else {
       showSetup()
     }
@@ -148,10 +200,7 @@
   function onConfigured() {
     showChat()
     setStatus('ready')
-  }
-
-  function onSessionId({ sessionId }) {
-    workspaceEl.textContent = workspaceEl.textContent || ''
+    vscode.postMessage({ type: 'listSessions' })
   }
 
   function onSystemMessage({ text }) {
@@ -164,7 +213,7 @@
       assistantText = ''
     }
     assistantText += text
-    assistantBlock.innerHTML = renderBlock(assistantText)
+    assistantBlock.innerHTML = renderMarkdown(assistantText)
     assistantBlock.classList.add('streaming')
     scrollToBottom()
   }
@@ -228,7 +277,6 @@
   function onError({ message }) {
     onAssistantDone()
     if (setupEl.hidden === false) {
-      // Key setup failed — stay on the setup screen with the error.
       showSetup(message)
       connectBtn.disabled = false
     } else {
@@ -251,8 +299,9 @@
     switch (message.type) {
       case 'state': onState(message); break
       case 'configured': onConfigured(); break
+      case 'models': onModels(message); break
+      case 'sessions': onSessions(message); break
       case 'status': setStatus(message.status); break
-      case 'sessionId': onSessionId(message); break
       case 'systemMessage': onSystemMessage(message); break
       case 'assistantDelta': onAssistantDelta(message); break
       case 'assistantDone': onAssistantDone(); break
@@ -279,6 +328,26 @@
     if (event.key === 'Enter') { event.preventDefault(); void connect() }
   })
 
+  modelSelect.addEventListener('change', () => {
+    const model = modelSelect.value
+    if (model === '' || model === currentModel) return
+    currentModel = model
+    addMessageEl('system', `New conversation · model: ${model}`)
+    vscode.postMessage({ type: 'setModel', text: model })
+  })
+
+  historySelect.addEventListener('focus', () => { vscode.postMessage({ type: 'listSessions' }) })
+  historySelect.addEventListener('change', () => {
+    const sessionId = historySelect.value
+    historySelect.value = ''
+    if (sessionId === '') {
+      vscode.postMessage({ type: 'newSession' })
+    } else {
+      addMessageEl('system', 'Resuming previous conversation…')
+      vscode.postMessage({ type: 'resumeSession', text: sessionId })
+    }
+  })
+
   function send() {
     const text = inputEl.value.trim()
     if (text === '' || busy) return
@@ -298,6 +367,5 @@
   stopBtn.addEventListener('click', () => { vscode.postMessage({ type: 'stop' }) })
   newSessionBtn.addEventListener('click', () => { vscode.postMessage({ type: 'newSession' }) })
 
-  // Ask the host for the current state (configured? model? workspace?).
   vscode.postMessage({ type: 'ready' })
 })()

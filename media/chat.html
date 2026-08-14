@@ -15,7 +15,7 @@
     <div class="setup-card">
       <div class="logo">DSH</div>
       <h1 class="setup-title">DeepSeek Harness</h1>
-      <p class="setup-subtitle">Coding agent in your editor — powered by DeepSeek Harness.</p>
+      <p class="setup-subtitle">A coding agent in your editor, powered by DeepSeek Harness.</p>
 
       <label class="field-label" for="key-input">API Key</label>
       <input id="key-input" type="password" class="key-input" placeholder="sk-…"
@@ -23,8 +23,8 @@
       <button id="connect-btn" class="connect-btn">Connect</button>
 
       <p id="setup-error" class="setup-error" hidden></p>
-      <p class="setup-hint">Your key is stored in VS Code's secret storage. It never leaves this machine.</p>
-      <p class="setup-hint dim">Alternatively export <code>DEEPSEEK_API_KEY</code> in your environment, or add it to the workspace <code>.env</code>.</p>
+      <p class="setup-hint">Stored in VS Code secret storage. Never leaves this machine.</p>
+      <p class="setup-hint dim">Or export <code>DEEPSEEK_API_KEY</code> in your environment / workspace <code>.env</code>.</p>
     </div>
   </section>
 
@@ -36,9 +36,20 @@
         <span id="status" class="status status-idle">idle</span>
       </div>
       <div class="header-row sub">
-        <span id="model" class="model"></span>
-        <span id="workspace" class="workspace"></span>
+        <label class="select-wrap" title="Model">
+          <span class="select-label">model</span>
+          <select id="model-select" class="select"></select>
+        </label>
+        <label class="select-wrap" title="History">
+          <span class="select-label">history</span>
+          <select id="history-select" class="select">
+            <option value="">New conversation</option>
+          </select>
+        </label>
         <button id="new-session" class="icon-btn" title="New session">＋</button>
+      </div>
+      <div class="header-row sub">
+        <span id="workspace" class="workspace"></span>
       </div>
     </header>
 

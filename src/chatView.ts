@@ -84,6 +84,8 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           if (configured) {
             this.runtime.setApiKey(stored ?? undefined)
             await this.runtime.start()
+            const models = await this.runtime.listModels()
+            await view.webview.postMessage({ type: 'models', models })
           }
           break
         }
@@ -93,7 +95,31 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           await this.context.secrets.store(API_KEY_SECRET, key)
           this.runtime.setApiKey(key)
           await this.runtime.start()
+          const models = await this.runtime.listModels()
           await view.webview.postMessage({ type: 'configured' })
+          await view.webview.postMessage({ type: 'models', models })
+          break
+        }
+        case 'setModel':
+          if (typeof message.text === 'string' && message.text !== '') {
+            await this.runtime.newSession(message.text)
+            await view.webview.postMessage({ type: 'clear' })
+          }
+          break
+        case 'newSession':
+          await this.runtime.newSession()
+          await view.webview.postMessage({ type: 'clear' })
+          break
+        case 'resumeSession':
+          if (typeof message.text === 'string' && message.text !== '') {
+            await this.runtime.resumeSession(message.text)
+            await view.webview.postMessage({ type: 'clear' })
+            await view.webview.postMessage({ type: 'systemMessage', text: 'Resumed a previous conversation.' })
+          }
+          break
+        case 'listSessions': {
+          const sessions = await this.runtime.listSessions()
+          await view.webview.postMessage({ type: 'sessions', sessions })
           break
         }
         case 'prompt':
@@ -103,10 +129,6 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           break
         case 'stop':
           await this.runtime.cancel()
-          break
-        case 'newSession':
-          await this.runtime.newSession()
-          await view.webview.postMessage({ type: 'clear' })
           break
         default:
           break

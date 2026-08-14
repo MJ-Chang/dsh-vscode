@@ -4,12 +4,12 @@
  * dsh-jsonrpc-agent bin with runtime/cordis.yml and exercises the wire
  * protocol end to end without VS Code.
  *
- *   initialize → prompt → session/cancel → observe session.event stream → close
+ *   initialize → models/list → session/new (with model) → prompt →
+ *   session/cancel → session/list → observe session.event stream → close
  *
  * A real model answer requires DEEPSEEK_API_KEY in the environment; without
- * one the run still validates boot, handshake, prompt queueing, cancellation,
- * and event streaming (the model request fails, which surfaces as a turn/end
- * error event instead of an assistant message).
+ * one the run still validates boot, handshake, catalog, history, prompt
+ * queueing, cancellation, and event streaming.
  */
 import { mkdir } from 'node:fs/promises'
 import { createRequire } from 'node:module'
@@ -46,8 +46,7 @@ const events = []
 ;(async () => {
   for await (const notification of subscription) {
     if (notification.method === 'session.event') {
-      const event = notification.params.event
-      events.push(event)
+      events.push(notification.params.event)
     }
   }
 })().catch(() => {})
@@ -61,25 +60,42 @@ try {
     provider: 'deepseek-official',
     model: 'deepseek-v4-flash',
   })
-  console.log(`[1/5] initialize OK — ${init.serverInfo.name} ${init.serverInfo.version}`)
+  console.log(`[1/6] initialize OK — ${init.serverInfo.name} ${init.serverInfo.version}`)
+
+  const catalog = await client.request('models/list', {}, 5000)
+  const models = catalog.models ?? []
+  console.log(`[2/6] models/list OK — ${models.length} model(s): ${models.map((m) => m.id).join(', ') || '(none)'}`)
+  if (models.length === 0) {
+    console.error('[FAIL] models/list returned an empty catalog')
+    process.exitCode = 1
+  }
+
+  const created = await client.request('session/new', { sessionId, model: 'deepseek-v4-flash' }, 10000)
+  console.log(`[3/6] session/new OK — ${JSON.stringify(created)}`)
 
   const messageId = await client.prompt(sessionId, [{ type: 'text', text: 'Say hi.' }])
-  console.log(`[2/5] prompt OK — messageId ${messageId}`)
+  console.log(`[4/6] prompt OK — messageId ${messageId}`)
 
   await sleep(600)
   const cancel = await client.request('session/cancel', { sessionId }, 5000)
-  console.log(`[3/5] session/cancel OK — ${JSON.stringify(cancel)}`)
+  console.log(`[5/6] session/cancel OK — ${JSON.stringify(cancel)}`)
 
-  await sleep(2500)
+  const history = await client.request('session/list', {}, 5000)
+  const sessionsFound = history.sessions ?? []
+  console.log(`[6/6] session/list OK — ${sessionsFound.length} persisted session(s)`)
+  if (!sessionsFound.some((entry) => entry.sessionId === sessionId)) {
+    console.error(`[WARN] session ${sessionId} not listed (persistence may flush later)`)
+  }
+
+  await sleep(2000)
   const uniqueTypes = [...new Set(events.map((event) => event?.type))]
-  console.log(`[4/5] session.event stream (${events.length} events): ${uniqueTypes.join(', ') || '(empty)'}`)
-
+  console.log(`      session.event stream (${events.length} events): ${uniqueTypes.join(', ') || '(empty)'}`)
   const turnEnd = events.find((event) => event?.type === 'turn/end')
   if (events.length === 0) {
     console.error('[FAIL] no session events received')
     process.exitCode = 1
   } else if (turnEnd === undefined) {
-    console.error('[WARN] turn/end not observed within the window (a keyless run still emits one)')
+    console.error('[FAIL] turn/end not observed within the window')
     process.exitCode = 1
   } else {
     console.log(`      turn/end reason: ${JSON.stringify(turnEnd.data.reason)}`)
@@ -88,7 +104,7 @@ try {
   console.error(`[FAIL] ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
 } finally {
-  console.log('[5/5] closing runtime…')
+  console.log('closing runtime…')
   await client.close()
   const ok = process.exitCode === undefined || process.exitCode === 0
   console.log(ok ? 'SMOKE OK' : 'SMOKE FAILED')

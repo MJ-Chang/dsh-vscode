@@ -36,9 +36,12 @@ Extension host (spawn + 事件轉譯)
 
 ## 功能
 
-- **側邊聊天框**（Activity Bar → DeepSeek Harness 圖示，像 Copilot Chat）
-- 串流顯示 assistant 回覆、工具呼叫卡片（bash / read / write / edit / grep / glob…）
-- Stop 按鈕（`session/cancel`）、New session（同一個 runtime 開新 session）
+- **右側邊欄聊天框**（像 Codex / Claude Code / Copilot Chat，使用 VS Code 主題配色）
+- **模型選擇**：標題列的 model 下拉選單，從 harness LLM 目錄讀取（deepseek-v4-flash / deepseek-v4-pro…），切換即開新對話
+- **歷史聊天**：標題列的 history 下拉選單，列出已持久化的對話（JSONL），點選即可續接
+- **API key 設定畫面**在聊天視窗內完成（SecretStorage 儲存），另有 `Set API Key` / `Clear API Key` 指令
+- 串流顯示 assistant 回覆（markdown 渲染）、工具呼叫卡片（bash / read / write / edit / grep / glob…）
+- Stop 按鈕（`session/cancel`）、New session
 - 專案編輯由 harness 的 fs + bash 工具完成，工作區即 sandbox 根目錄
 
 ## 需求

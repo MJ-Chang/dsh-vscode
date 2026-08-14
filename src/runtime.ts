@@ -31,6 +31,21 @@ export type UiEvent =
 
 export type RuntimeStatus = 'starting' | 'ready' | 'busy' | 'idle' | 'error' | 'stopped'
 
+/** One model from the harness LLM catalog. */
+export interface ModelInfo {
+  id: string
+  name?: string
+  description?: string
+}
+
+/** One persisted session listed by the runtime. */
+export interface SessionInfo {
+  sessionId: string
+  cwd?: string
+  createdAt?: number
+  parentSession?: string
+}
+
 export interface RuntimeOptions {
   /** Extension install root; runtime/cordis.yml lives here. */
   extensionPath: string
@@ -189,18 +204,68 @@ export class HarnessRuntime {
     }
   }
 
-  /** Drop the current session context and start a fresh one in the same runtime. */
-  async newSession(): Promise<void> {
-    if (this.client === undefined) return
-    this.subscription?.close()
-    this.subscription = undefined
-    this.openSession()
-    this.emit({ type: 'status', status: 'idle' })
-  }
-
   /** The active session id (client-side identity the runtime adopts). */
   currentSessionId(): string | undefined {
     return this.sessionId
+  }
+
+  /** List the LLM catalog the runtime's provider advertises. */
+  async listModels(): Promise<ModelInfo[]> {
+    await this.start()
+    const client = this.client
+    if (client === undefined) return []
+    try {
+      const result = await client.request('models/list', {}, 5_000) as { models?: ModelInfo[] }
+      return Array.isArray(result.models) ? result.models : []
+    } catch {
+      return []
+    }
+  }
+
+  /** List persisted sessions (history) from the runtime's persistence backend. */
+  async listSessions(): Promise<SessionInfo[]> {
+    await this.start()
+    const client = this.client
+    if (client === undefined) return []
+    try {
+      const result = await client.request('session/list', {}, 5_000) as { sessions?: SessionInfo[] }
+      return Array.isArray(result.sessions)
+        ? result.sessions.filter((entry) => entry.parentSession === undefined)
+        : []
+    } catch {
+      return []
+    }
+  }
+
+  /** Start a new conversation, optionally with a specific model. */
+  async newSession(model?: string): Promise<void> {
+    await this.start()
+    const client = this.client
+    if (client === undefined) return
+    const sessionId = `vscode-${randomUUID()}`
+    await client.request('session/new', { sessionId, ...(model === undefined ? {} : { model }) }, 10_000)
+    this.subscription?.close()
+    this.subscription = undefined
+    this.sessionId = sessionId
+    this.subscription = client.subscribeSessionTree(sessionId)
+    void this.pumpNotifications()
+    this.emit({ type: 'sessionId', sessionId })
+    this.emit({ type: 'status', status: 'idle' })
+  }
+
+  /** Resume a persisted conversation by session id. */
+  async resumeSession(sessionId: string): Promise<void> {
+    await this.start()
+    const client = this.client
+    if (client === undefined) return
+    await client.request('session/new', { sessionId }, 10_000)
+    this.subscription?.close()
+    this.subscription = undefined
+    this.sessionId = sessionId
+    this.subscription = client.subscribeSessionTree(sessionId)
+    void this.pumpNotifications()
+    this.emit({ type: 'sessionId', sessionId })
+    this.emit({ type: 'status', status: 'idle' })
   }
 
   /** Request protocol shutdown and reap the child. Idempotent. */
