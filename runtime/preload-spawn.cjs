@@ -1,22 +1,12 @@
 /**
  * Preload for the harness runtime child process (Windows only).
  *
- * Goal: shell commands must never flash a console window. Two mechanisms, in
- * order:
- *
- * 1. HIDDEN CONSOLE — allocate a console and hide its window. The windows-acl
- *    sandbox runner spawns its restricted-token child WITHOUT CREATE_NO_WINDOW
- *    (hidden-console children die with STATUS_DLL_INIT_FAILED under that
- *    scheme) and the child "shares the host console". When this process has a
- *    hidden console, every child — pwsh, the runner, taskkill — inherits and
- *    shares it: zero visible windows. An inherited console (runtime launched
- *    from a terminal) is left untouched.
- *
- * 2. FALLBACK PATCH — when no console can be allocated (some environments
- *    deny AllocConsole), inject windowsHide into child_process.spawn /
- *    spawnSync / execFileSync so direct spawns (taskkill, plain shell calls)
- *    do not pop windows either. The sandboxed runner chain may still flash in
- *    this fallback, but the common paths are covered.
+ * The runtime is spawned by the extension host as a CONSOLE-subsystem
+ * node.exe (see resolveRuntimeNode in src/runtime.ts) so its console is
+ * inherited down the sandbox runner → shell chain. The OS creates a console
+ * window for that process at spawn; this preload hides it. If the process
+ * somehow has no console (console-less launch), AllocConsole is attempted
+ * first; if that too is denied, a windowsHide spawn patch minimizes flashes.
  */
 'use strict'
 
@@ -30,14 +20,14 @@ if (process.platform === 'win32') {
     const AllocConsole = kernel32.func('int AllocConsole(void)')
     const ShowWindow = user32.func('int ShowWindow(void* hWnd, int nCmdShow)')
 
-    if (GetConsoleWindow() === null) {
-      if (AllocConsole() !== 0) {
-        const hwnd = GetConsoleWindow()
-        if (hwnd !== null) ShowWindow(hwnd, 0) // SW_HIDE
-        consoleReady = true
-      }
-    } else {
-      consoleReady = true // inherited console: children share it already
+    let hwnd = GetConsoleWindow()
+    if (hwnd === null) {
+      // Console-less launch (e.g. CREATE_NO_WINDOW): allocate one.
+      if (AllocConsole() !== 0) hwnd = GetConsoleWindow()
+    }
+    if (hwnd !== null) {
+      ShowWindow(hwnd, 0) // SW_HIDE — keep the shared console, hide its window
+      consoleReady = true
     }
   } catch (error) {
     process.stderr.write(`[dsh-vscode] hidden-console preload skipped: ${String(error)}\n`)

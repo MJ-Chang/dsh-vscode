@@ -28,8 +28,10 @@ await mkdir(workspace, { recursive: true })
 await mkdir(sessions, { recursive: true })
 
 const client = new HarnessClient({
-  command: process.execPath,
-  // Same launch shape as the extension: preload hides Windows console windows.
+  // A console-subsystem node.exe (like the extension now uses) so the
+  // runtime's hidden console is inherited by shell children.
+  command: 'C:\\Program Files\\nodejs\\node.exe',
+  // Same launch shape as the extension: the hidden-console preload.
   args: ['--require', path.join(root, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/'), bin, config],
   cwd: workspace,
   env: {

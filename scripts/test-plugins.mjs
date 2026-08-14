@@ -100,6 +100,8 @@ try {
     client.start()
     const init = await client.initialize({ cwd: workspace, provider: 'deepseek-official', model: 'deepseek-v4-flash' })
     check('runtime boots with user plugin layer', init.serverInfo.name === 'deepseek-harness-sdk-runtime')
+    // The plugin's apply runs during boot; give the filesystem a moment.
+    await new Promise((resolve) => setTimeout(resolve, 1500))
     let markerContent = ''
     try { markerContent = await readFile(marker, 'utf8') } catch { /* absent */ }
     check('user plugin apply() ran', markerContent === 'loaded', `marker: ${JSON.stringify(markerContent)}`)

@@ -28,6 +28,9 @@ import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import { SessionId } from '@deepseek-ai/dsh-session'
 import { setSandboxMode } from '@deepseek-ai/dsh-sandbox-policy'
 import * as LlmDeepSeek from '@deepseek-ai/dsh-llm-deepseek'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
 
 export const name = 'vscode-bridge'
 
@@ -134,6 +137,49 @@ export function apply(ctx) {
         broken: preset.broken,
       })),
     }
+  }
+
+  // Diagnostic: spawn a probe child through the SAME subprocess path the shell
+  // executor uses and report the child's console window state. Lets tests
+  // verify (in the real runtime) that children share the hidden console
+  // instead of creating a visible one (the cmd-flash bug).
+  async function spawnProbe() {
+    const subprocess = ctx.get('subprocess')
+    if (subprocess === undefined) return { error: 'no subprocess service' }
+    // The runtime's own console state (does the hidden-console preload work?)
+    let runtimeConsole = 'unknown'
+    try {
+      const koffi = require('koffi')
+      const kernel32 = koffi.load('kernel32.dll')
+      const GetConsoleWindow = kernel32.func('void* GetConsoleWindow(void)')
+      runtimeConsole = GetConsoleWindow() !== null
+    } catch (error) {
+      runtimeConsole = `koffi-error: ${error.message}`
+    }
+    const probe = `
+      const koffi = require(${JSON.stringify(require.resolve('koffi'))})
+      const kernel32 = koffi.load('kernel32.dll')
+      const user32 = koffi.load('user32.dll')
+      const GetConsoleWindow = kernel32.func('void* GetConsoleWindow(void)')
+      const IsWindowVisible = user32.func('int IsWindowVisible(void* hWnd)')
+      const hwnd = GetConsoleWindow()
+      console.log('PROBE=' + JSON.stringify({ hasConsole: hwnd !== null, visible: hwnd !== null ? IsWindowVisible(hwnd) !== 0 : false }))
+    `
+    // A CONSOLE-subsystem child (the system node.exe) — this is the kind of
+    // process that flashes; Code.exe (GUI subsystem) never has a console.
+    const systemNode = 'C:\\Program Files\\nodejs\\node.exe'
+    const handle = subprocess.spawn({
+      argv: [systemNode, '-e', probe],
+      cwd: cwd,
+      stdio: { stdin: 'ignore', stdout: { mode: 'collect', maxBytes: 4096 }, stderr: { mode: 'collect', maxBytes: 4096 } },
+      graceMs: 10000,
+    })
+    await handle.done
+    const stdout = handle.collected?.stdout?.readFrom(0).text ?? ''
+    const stderr = handle.collected?.stderr?.readFrom(0).text ?? ''
+    const match = stdout.match(/PROBE=(\{.*\})/)
+    const child = match === null ? { stdout: stdout.slice(0, 600), stderr: stderr.slice(0, 600) } : JSON.parse(match[1])
+    return { runtimeConsole, child }
   }
 
   async function createSession(params) {
@@ -257,6 +303,7 @@ export function apply(ctx) {
       case 'initialize': result = await initialize(params ?? {}); break
       case 'models/list': result = await listModels(); break
       case 'presets/list': result = await listPresets(); break
+      case 'debug/spawnProbe': result = await spawnProbe(); break
       case 'session/new': result = await createSession(params ?? {}); break
       case 'session/prompt': result = await prompt(params ?? {}); break
       case 'session/cancel': result = await cancel(params ?? {}); break

@@ -84,6 +84,38 @@ export function resolveRuntimeBin(extensionPath: string): string {
   return require.resolve('@deepseek-ai/dsh-sdk-jsonrpc-demo/bin')
 }
 
+/**
+ * Resolve a console-subsystem Node executable to run the runtime.
+ *
+ * On Windows this MUST NOT be the extension host's process.execPath
+ * (Code.exe, GUI subsystem): a GUI process's console is never inherited by
+ * children, so the sandbox runner → pwsh chain would create a visible console
+ * window per command (the flashing bug). A real node.exe (console subsystem)
+ * holds a console the whole chain can share — exactly how the official
+ * harness runs.
+ */
+export function resolveRuntimeNode(): string {
+  if (process.platform !== 'win32') return process.execPath
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { existsSync } = require('node:fs') as typeof import('node:fs')
+  const candidates: string[] = []
+  if (process.env.npm_node_execpath !== undefined) candidates.push(process.env.npm_node_execpath)
+  for (const dir of (process.env.Path ?? '').split(';')) {
+    if (dir !== '') candidates.push(path.join(dir.trim(), 'node.exe'))
+  }
+  candidates.push(
+    'C:\\Program Files\\nodejs\\node.exe',
+    'C:\\Program Files (x86)\\nodejs\\node.exe',
+  )
+  for (const candidate of candidates) {
+    if (candidate !== undefined && candidate !== '' && existsSync(candidate)
+      && !candidate.toLowerCase().includes('microsoft vs code')) {
+      return candidate
+    }
+  }
+  return process.execPath
+}
+
 let sdkPromise: Promise<SdkModule> | undefined
 /**
  * Load the ESM SDK client. The extension bundle is CJS and the SDK client is
@@ -196,9 +228,11 @@ export class HarnessRuntime {
       childEnv[this.options.apiKeyEnv] = this.apiKey
     }
     const client = new sdk.HarnessClient({
-      command: process.execPath,
-      // The preload hides console windows for the runtime's own shell spawns
-      // on Windows (the extension host is a GUI process).
+      // A console-subsystem node.exe (not the GUI Code.exe) so the runtime's
+      // console is inherited by the sandbox runner → shell chain.
+      command: resolveRuntimeNode(),
+      // The preload hides the runtime's console window on Windows (the OS
+      // creates one for the console-subsystem process at spawn).
       args: [
         '--require',
         path.join(this.options.extensionPath, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/'),

@@ -19,6 +19,17 @@ export function applyWindowsSpawnPatch(): void {
     args?: readonly string[] | undefined,
     options?: object,
   ) {
+    // The runtime spawn MUST keep its OS-created console (a console-subsystem
+    // node.exe whose console the sandbox chain inherits). windowsHide there
+    // would make every shell command flash a new console window.
+    const argv = args ?? []
+    const isRuntime = argv.some((arg) => typeof arg === 'string'
+      && (arg.includes('dsh-sdk-jsonrpc-demo') || arg.includes('preload-spawn.cjs')))
+    if (isRuntime) {
+      // The runtime spawn keeps its OS-created console (a console-subsystem
+      // node.exe whose console the sandbox chain inherits).
+      return original.call(this, command, (args ?? []) as readonly string[], options as Parameters<typeof original>[2])
+    }
     let opts = options
     if (opts === undefined) {
       opts = { windowsHide: true }

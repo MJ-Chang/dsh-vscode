@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const preload = path.join(root, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/')
-const codeExe = 'C:\\Users\\iamyt\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe'
+const runtimeNode = 'C:\\Program Files\\nodejs\\node.exe'
 const koffiPath = path.join(root, 'node_modules', 'koffi').replace(/\\/g, '/')
 
 let failed = false
@@ -23,9 +23,13 @@ const check = (name, ok, detail = '') => {
   if (!ok) failed = true
 }
 
-function runProbe(command, args, env, probeSource) {
+function runProbe(command, args, env, probeSource, options = {}) {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'], env, windowsHide: true })
+    const child = spawn(command, args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+      ...options,
+    })
     let out = ''
     let err = ''
     child.stdout.on('data', (d) => { out += d })
@@ -34,33 +38,29 @@ function runProbe(command, args, env, probeSource) {
   })
 }
 
-// 1. REAL MODE: Code.exe + ELECTRON_RUN_AS_NODE (needs the preload itself,
-//    which calls koffi — so probe inside a --require'd script).
+// 1. REAL MODE: console-subsystem node.exe (how the extension now spawns the
+//    runtime) — the OS gives it a console; the preload must hide its window.
 const realProbe = `
 const koffi = require(${JSON.stringify(koffiPath)})
 const kernel32 = koffi.load('kernel32.dll')
 const user32 = koffi.load('user32.dll')
 const GetConsoleWindow = kernel32.func('void* GetConsoleWindow(void)')
-const AllocConsole = kernel32.func('int AllocConsole(void)')
-const ShowWindow = user32.func('int ShowWindow(void* hWnd, int nCmdShow)')
-const before = GetConsoleWindow()
-const alloc = AllocConsole()
-const after = GetConsoleWindow()
-let hidden = 0
-if (after !== null) hidden = ShowWindow(after, 0)
-console.log('RESULT=' + JSON.stringify({ before: before !== null, alloc, after: after !== null, hidden }))
+const IsWindowVisible = user32.func('int IsWindowVisible(void* hWnd)')
+const hwnd = GetConsoleWindow()
+console.log('RESULT=' + JSON.stringify({ hasConsole: hwnd !== null, visible: hwnd !== null ? IsWindowVisible(hwnd) !== 0 : false }))
 `
 const realResult = await runProbe(
-  codeExe,
+  runtimeNode,
   ['--require', preload, '-e', realProbe],
-  { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+  process.env,
   realProbe,
+  // The extension spawns the runtime WITHOUT windowsHide so the OS gives the
+  // console-subsystem process a console for the preload to hide.
+  { windowsHide: false },
 )
 console.log(`[real mode] exit=${realResult.code} ${realResult.out.trim()}${realResult.err.trim() ? ` stderr=${realResult.err.trim()}` : ''}`)
 const real = JSON.parse((realResult.out.match(/RESULT=(\{.*\})/) ?? [])[1] ?? '{}')
-// The probe runs AFTER the preload: a console present means the preload
-// allocated (and hid) it — exactly what sandboxed children need to share.
-check('real mode: runtime ends up with a (hidden) console', real.after === true)
+check('real mode: runtime has a console and its window is hidden', real.hasConsole === true && real.visible === false)
 
 // 2. FALLBACK MODE: plain node — spawn patch must be active.
 const fallbackProbe = `
@@ -76,6 +76,9 @@ const fallbackResult = await runProbe(
   ['--require', preload, '--input-type=module', '-e', fallbackProbe],
   process.env,
   fallbackProbe,
+  // Console-less launch (CREATE_NO_WINDOW): AllocConsole is denied for a
+  // console-subsystem process, so the preload must fall back to the patch.
+  { windowsHide: true },
 )
 console.log(`[fallback mode] exit=${fallbackResult.code} ${fallbackResult.out.trim()}`)
 const fallback = JSON.parse((fallbackResult.out.match(/RESULT=(\{.*\})/) ?? [])[1] ?? '{}')
