@@ -17,9 +17,30 @@
     "onCommand:dshVscode.openChat",
     "onCommand:dshVscode.startRuntime",
     "onCommand:dshVscode.setApiKey",
-    "onCommand:dshVscode.clearApiKey"
+    "onCommand:dshVscode.clearApiKey",
+    "onView:dshVscode.chatView"
   ],
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dshVscode.chatContainer",
+          "title": "DeepSeek Harness",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "dshVscode.chatContainer": [
+        {
+          "type": "webview",
+          "id": "dshVscode.chatView",
+          "name": "Chat",
+          "icon": "media/icon.svg",
+          "contextualTitle": "DeepSeek Harness Chat"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "dshVscode.openChat",

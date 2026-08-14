@@ -1,8 +1,17 @@
 # dsh-vscode — DeepSeek Harness for VS Code
 
-在 VS Code 裡面像 Claude Code / Codex / Copilot 一樣使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：開啟一個對話面板，agent 可以讀取、編輯你開啟的專案，並執行指令。
+在 VS Code 裡面像 Claude Code / Codex / Copilot 一樣使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：**左側 Activity Bar 有 DeepSeek Harness 圖示**，點開是**側邊聊天框**，agent 可以讀取、編輯你開啟的專案，並執行指令。
 
 Everything is a plugin：這個 repo 同時包含 **VS Code 擴充功能** 與 **harness 端的 bridge 插件**（`runtime/plugins/vscode-bridge.mjs`），兩者都以「插件」的形式組裝在 DeepSeek Harness 之上。
+
+## 安裝（VS Code 外掛）
+
+1. `npm install && npm run build`
+2. `npm run package` → 產出 `dsh-vscode-0.1.0.vsix`
+3. 安裝：VS Code 延伸模組面板 → `⋯` → **Install from VSIX...**，或指令 `code --install-extension dsh-vscode-0.1.0.vsix`
+4. 左側 Activity Bar 出現 **DeepSeek Harness** 圖示 → 點開側邊聊天框 → 輸入 API key → 開始使用
+
+要發佈到 Marketplace / Open VSX 給所有人安裝，用 `vsce publish`（需先註冊 publisher）。
 
 ## 架構
 
@@ -27,8 +36,8 @@ Extension host (spawn + 事件轉譯)
 
 ## 功能
 
-- 側邊對話面板，串流顯示 assistant 回覆
-- 工具呼叫卡片（bash / read / write / edit / grep / glob…），可展開看參數與結果
+- **側邊聊天框**（Activity Bar → DeepSeek Harness 圖示，像 Copilot Chat）
+- 串流顯示 assistant 回覆、工具呼叫卡片（bash / read / write / edit / grep / glob…）
 - Stop 按鈕（`session/cancel`）、New session（同一個 runtime 開新 session）
 - 專案編輯由 harness 的 fs + bash 工具完成，工作區即 sandbox 根目錄
 

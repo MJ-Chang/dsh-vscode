@@ -1,15 +1,16 @@
 /**
- * dsh-vscode extension entry: commands, runtime lifecycle, chat panel, and
- * API-key management (VS Code SecretStorage with an env-var fallback).
+ * dsh-vscode extension entry: commands, runtime lifecycle, sidebar chat view,
+ * and API-key management (VS Code SecretStorage with an env-var fallback).
  */
 
 import * as vscode from 'vscode'
-import { openChatPanel } from './panel'
+import { ChatViewProvider } from './chatView'
 import { HarnessRuntime } from './runtime'
 
 const API_KEY_SECRET = 'dshVscode.apiKey'
 
 let runtime: HarnessRuntime | undefined
+let chatProvider: ChatViewProvider | undefined
 
 /**
  * Resolve the API key the runtime should use, prompting the user on first use.
@@ -58,12 +59,12 @@ function getRuntime(context: vscode.ExtensionContext): HarnessRuntime | undefine
   return runtime
 }
 
-/** Activate the extension: register commands and wire the panel. */
+/** Activate the extension: register the sidebar view and commands. */
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('dshVscode.openChat', () => {
-      const target = getRuntime(context)
-      if (target !== undefined) openChatPanel(context, target, () => ensureApiKey(context))
+      if (getRuntime(context) === undefined) return
+      void vscode.commands.executeCommand('dshVscode.chatView.focus')
     }),
   )
 
@@ -96,7 +97,7 @@ export function activate(context: vscode.ExtensionContext): void {
       await context.secrets.store(API_KEY_SECRET, input.trim())
       runtime?.setApiKey(input.trim())
       void vscode.window.showInformationMessage(
-        'DeepSeek Harness: API key saved. Close and reopen the chat panel to apply it to a running runtime.',
+        'DeepSeek Harness: API key saved. It is used from the next chat message on.',
       )
     }),
   )
@@ -108,11 +109,22 @@ export function activate(context: vscode.ExtensionContext): void {
       void vscode.window.showInformationMessage('DeepSeek Harness: API key removed.')
     }),
   )
+
+  const target = getRuntime(context)
+  if (target !== undefined) {
+    chatProvider = new ChatViewProvider(context, target, () => ensureApiKey(context))
+    context.subscriptions.push(
+      vscode.window.registerWebviewViewProvider('dshVscode.chatView', chatProvider, {
+        webviewOptions: { retainContextWhenHidden: true },
+      }),
+    )
+  }
 }
 
 /** Shut the runtime child process down when VS Code exits. */
 export function deactivate(): void {
   const target = runtime
   runtime = undefined
+  chatProvider = undefined
   void target?.dispose()
 }
