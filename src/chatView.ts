@@ -9,7 +9,7 @@ import * as vscode from 'vscode'
 import { HarnessRuntime, type UiEvent } from './runtime'
 
 /** The chat view id contributed under `views` in package.json. */
-export const CHAT_VIEW_ID = 'dshVscode.chatView'
+export const CHAT_VIEW_ID = 'dsh-vscode-chat-view'
 
 /**
  * WebviewViewProvider for the sidebar chat. One provider per extension

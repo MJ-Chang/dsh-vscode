@@ -64,7 +64,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('dshVscode.openChat', () => {
       if (getRuntime(context) === undefined) return
-      void vscode.commands.executeCommand('dshVscode.chatView.focus')
+      void vscode.commands.executeCommand('dsh-vscode-chat-view.focus')
     }),
   )
 
@@ -114,7 +114,7 @@ export function activate(context: vscode.ExtensionContext): void {
   if (target !== undefined) {
     chatProvider = new ChatViewProvider(context, target, () => ensureApiKey(context))
     context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider('dshVscode.chatView', chatProvider, {
+      vscode.window.registerWebviewViewProvider('dsh-vscode-chat-view', chatProvider, {
         webviewOptions: { retainContextWhenHidden: true },
       }),
     )

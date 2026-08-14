@@ -18,23 +18,23 @@
     "onCommand:dshVscode.startRuntime",
     "onCommand:dshVscode.setApiKey",
     "onCommand:dshVscode.clearApiKey",
-    "onView:dshVscode.chatView"
+    "onView:dsh-vscode-chat-view"
   ],
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "dshVscode.chatContainer",
+          "id": "dsh-vscode-chat",
           "title": "DeepSeek Harness",
           "icon": "media/icon.svg"
         }
       ]
     },
     "views": {
-      "dshVscode.chatContainer": [
+      "dsh-vscode-chat": [
         {
           "type": "webview",
-          "id": "dshVscode.chatView",
+          "id": "dsh-vscode-chat-view",
           "name": "Chat",
           "icon": "media/icon.svg",
           "contextualTitle": "DeepSeek Harness Chat"
