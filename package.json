@@ -15,7 +15,9 @@
   "main": "./dist/extension.js",
   "activationEvents": [
     "onCommand:dshVscode.openChat",
-    "onCommand:dshVscode.startRuntime"
+    "onCommand:dshVscode.startRuntime",
+    "onCommand:dshVscode.setApiKey",
+    "onCommand:dshVscode.clearApiKey"
   ],
   "contributes": {
     "commands": [
@@ -27,6 +29,16 @@
       {
         "command": "dshVscode.startRuntime",
         "title": "Start Runtime",
+        "category": "DeepSeek Harness"
+      },
+      {
+        "command": "dshVscode.setApiKey",
+        "title": "Set API Key",
+        "category": "DeepSeek Harness"
+      },
+      {
+        "command": "dshVscode.clearApiKey",
+        "title": "Clear API Key",
         "category": "DeepSeek Harness"
       }
     ],

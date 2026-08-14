@@ -84,10 +84,20 @@ export class HarnessRuntime {
   private sessionId: string | undefined
   private started = false
   private closed = false
+  private apiKey: string | undefined
   private readonly listeners = new Set<(event: UiEvent) => void>()
 
   /** @param options - launch and routing configuration. */
   constructor(private readonly options: RuntimeOptions) {}
+
+  /**
+   * Set the API key before start (or before the next start). Injected into the
+   * runtime child's environment under {@link RuntimeOptions.apiKeyEnv}.
+   * @param apiKey - the key, or `undefined` to rely on the inherited environment.
+   */
+  setApiKey(apiKey: string | undefined): void {
+    this.apiKey = apiKey === undefined ? undefined : apiKey.trim() === '' ? undefined : apiKey.trim()
+  }
 
   /** Subscribe to UI events; returns an unsubscribe function. */
   subscribe(listener: (event: UiEvent) => void): () => void {
@@ -111,17 +121,23 @@ export class HarnessRuntime {
     await mkdir(sessionsRoot, { recursive: true })
 
     this.emit({ type: 'status', status: 'starting' })
+    const childEnv: NodeJS.ProcessEnv = {
+      ...process.env,
+      DSH_SESSION_ROOT: sessionsRoot,
+      DSH_VSCODE_WORKSPACE: this.options.workspacePath,
+      DSH_VSCODE_WORKSPACE_WRITE: String(this.options.workspaceWriteOnly),
+      DSH_VSCODE_API_KEY_ENV: this.options.apiKeyEnv,
+    }
+    // A stored key wins over the inherited environment (never set the var to
+    // undefined — child_process would serialize that as the literal "undefined").
+    if (this.apiKey !== undefined) {
+      childEnv[this.options.apiKeyEnv] = this.apiKey
+    }
     const client = new sdk.HarnessClient({
       command: process.execPath,
       args: [bin, configPath],
       cwd: this.options.workspacePath,
-      env: {
-        ...process.env,
-        DSH_SESSION_ROOT: sessionsRoot,
-        DSH_VSCODE_WORKSPACE: this.options.workspacePath,
-        DSH_VSCODE_WORKSPACE_WRITE: String(this.options.workspaceWriteOnly),
-        DSH_VSCODE_API_KEY_ENV: this.options.apiKeyEnv,
-      },
+      env: childEnv,
       shutdownTimeoutMs: 1000,
       disposeEofGraceMs: 6000,
       disposeGraceMs: 3000,

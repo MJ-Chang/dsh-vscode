@@ -36,7 +36,17 @@ Extension host (spawn + 事件轉譯)
 
 - VS Code ≥ 1.90
 - Node.js ≥ 20（擴充功能 spawn 本機 Node 跑 harness runtime）
-- DeepSeek API key：設定環境變數 `DEEPSEEK_API_KEY`（或在設定中指定別的變數名）
+- DeepSeek API key（三種提供方式，見下）
+
+## 設定 API key（三選一）
+
+1. **在 VS Code 內設定（推薦）**：第一次開啟 Chat 面板時會提示輸入 key，存入 VS Code 的 SecretStorage（安全儲存）。也可以隨時用指令列執行：
+   - `DeepSeek Harness: Set API Key` — 設定／更新 key
+   - `DeepSeek Harness: Clear API Key` — 移除 key
+2. **環境變數**：在啟動 VS Code 的環境中設定 `DEEPSEEK_API_KEY`（或透過設定 `dshVscode.apiKeyEnv` 指定其他變數名）。
+3. **專案 `.env`**：harness runtime 啟動時會讀取工作區根目錄的 `.env`（`DEEPSEEK_API_KEY=...`）。
+
+優先序：SecretStorage → 環境變數 → 輸入提示。
 
 ## 開發
 
@@ -80,9 +90,8 @@ npm run package   # 產出 dsh-vscode-0.1.0.vsix（含完整 harness runtime）
 
 ## 已知限制（v1）
 
-- 需要使用者自行提供 `DEEPSEEK_API_KEY`；尚未整合 VS Code secret storage（v2 候選）。
-- 無 `ask` 權限流程：需要人工批准的動作直接拒絕（由 sandbox 當安全邊界）。
 - Windows 上 bash 透過 sandbox 的執行環境依賴平台能力，fs 工具的路徑限制在所有平台都生效。
+- 無 `ask` 權限流程：需要人工批准的動作直接拒絕（由 sandbox 當安全邊界）。
 - 尚未包含 subagent / workflow / MCP 等進階能力（v2 候選）。
 
 ## License

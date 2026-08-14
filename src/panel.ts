@@ -8,7 +8,11 @@ import * as vscode from 'vscode'
 import { HarnessRuntime, type UiEvent } from './runtime'
 
 /** Open (or focus) the chat panel and attach it to the runtime. */
-export function openChatPanel(context: vscode.ExtensionContext, runtime: HarnessRuntime): void {
+export function openChatPanel(
+  context: vscode.ExtensionContext,
+  runtime: HarnessRuntime,
+  ensureApiKey: () => Promise<string | undefined>,
+): void {
   const panel = vscode.window.createWebviewPanel(
     'dshVscode.chat',
     'DeepSeek Harness',
@@ -30,6 +34,7 @@ export function openChatPanel(context: vscode.ExtensionContext, runtime: Harness
     try {
       switch (message.type) {
         case 'ready':
+          runtime.setApiKey(await ensureApiKey())
           await runtime.start()
           break
         case 'prompt':
