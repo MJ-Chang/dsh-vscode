@@ -2,7 +2,7 @@
 
 All notable changes to this project are documented here. Versions follow the DeepSeek Harness release train they bundle (`0.1.0-rc.x`); the extension itself uses plain semver.
 
-## [0.2.0] — unreleased
+## [0.2.0] — 2026-08-14
 
 ### Added
 

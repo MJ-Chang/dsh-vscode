@@ -6,15 +6,14 @@
 https://github.com/kindle1126/dsh-vscode
 ```
 
-## 1. 推上 GitHub（唯一要做的動作）
+## 1. 推上 GitHub（已完成 ✅）
+
+Repo 已公開：**https://github.com/kindle1126/dsh-vscode**（MIT，`main` 分支，CI 自動執行）。之後的日常開發流程：
 
 ```sh
-# 1) github.com → New repository → 名稱填 dsh-vscode（public，不要勾選任何初始化選項）
-# 2) 在本機執行（origin 已綁定、檔案已全部 commit）：
-git push -u origin main
+git add -A && git commit -m "..."
+git push
 ```
-
-推送後 GitHub Actions 會自動在 Windows + Linux 跑 CI；public repo 的 secret scanning 也自動啟用。
 
 ## 2. 發佈到 VS Code Marketplace（可選，之後再做）
 
