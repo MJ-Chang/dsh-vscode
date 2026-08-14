@@ -1,0 +1,117 @@
+{
+  "name": "dsh-vscode",
+  "displayName": "DeepSeek Harness for VS Code",
+  "description": "Run DeepSeek Harness inside VS Code: chat with the agent and edit your project, like Claude Code / Codex / Copilot.",
+  "version": "0.1.0",
+  "publisher": "dsh-vscode",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:dshVscode.openChat",
+    "onCommand:dshVscode.startRuntime"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "dshVscode.openChat",
+        "title": "Open Chat",
+        "category": "DeepSeek Harness"
+      },
+      {
+        "command": "dshVscode.startRuntime",
+        "title": "Start Runtime",
+        "category": "DeepSeek Harness"
+      }
+    ],
+    "configuration": {
+      "title": "DeepSeek Harness",
+      "properties": {
+        "dshVscode.model": {
+          "type": "string",
+          "default": "deepseek-v4-flash",
+          "description": "Model used for chat requests. Choose from the harness LLM catalog (e.g. deepseek-v4-flash, deepseek-v4-pro)."
+        },
+        "dshVscode.apiKeyEnv": {
+          "type": "string",
+          "default": "DEEPSEEK_API_KEY",
+          "description": "Environment variable that holds the DeepSeek API key. The runtime resolves it from this extension's process environment."
+        },
+        "dshVscode.workspaceWriteOnly": {
+          "type": "boolean",
+          "default": true,
+          "description": "Confine the agent's bash and file edits to the opened workspace. When disabled the agent gets full filesystem access (use with care)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "package": "npm run build && npx @vscode/vsce package",
+    "test:runtime": "node scripts/smoke-runtime.mjs"
+  },
+  "dependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "@deepseek-ai/cordis-plugin-timer": "^1.1.3",
+    "@deepseek-ai/dsh-agent": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-agent-instructions": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-agent-loop": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-agent-spine-demo": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-local": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-bash-sandbox": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-compaction-basic": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-local": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-observation-policy": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-fs-sandbox": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-goal": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-goal-round-driver": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-home-paths": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-invariants": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-jobs": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-jobs-local": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm-deepseek": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-llm-retry": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-local": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sandbox-policy": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-scope": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sdk-client": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sdk-jsonrpc-demo": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sdk-jsonrpc-server": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-sdk-protocol": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-persistence-jsonl": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-session-title": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-shell": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-shell-env": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-skill": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-skill-filesystem": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-subprocess-local": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-system-prompt": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-token-meter": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-bash": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-fs": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-goal": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-jobs": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-skill": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tool-todo": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
+    "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.6"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

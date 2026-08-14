@@ -1,0 +1,109 @@
+# DeepSeek Harness runtime composition for the dsh-vscode extension.
+# Booted by `dsh-jsonrpc-agent <this file>` as a child process of the
+# extension host. Stdout carries JSON-RPC only — no stdout logger may load.
+#
+# Bare plugin names resolve from this extension's node_modules (the loader
+# walks up from this file). `./plugins/vscode-bridge.mjs` is our plugin: it
+# wraps the stock SDK JSON-RPC server and adds `session/cancel`.
+
+# The VS Code bridge: stock SDK JSON-RPC server + session/cancel.
+- id: vscode-bridge
+  name: './plugins/vscode-bridge.mjs'
+
+# DeepSeek adapter. Key resolves from the DEEPSEEK_API_KEY environment
+# variable at request time (configurable via dshVscode.apiKeyEnv setting).
+- id: llm-deepseek
+  name: '@deepseek-ai/dsh-llm-deepseek'
+  config:
+    apiKeyEnv: !!js process.env.DSH_VSCODE_API_KEY_ENV ?? 'DEEPSEEK_API_KEY'
+    thinking: enabled
+    reasoningEffort: high
+    models:
+      - id: deepseek-v4-flash
+      - id: deepseek-v4-pro
+
+# The sandbox confines bash AND the filesystem tools to the opened workspace.
+# DSH_VSCODE_WORKSPACE_WRITE is set by the extension from its
+# dshVscode.workspaceWriteOnly setting.
+- id: sandbox
+  name: '@deepseek-ai/dsh-sandbox-local'
+
+- id: sandbox-policy
+  name: '@deepseek-ai/dsh-sandbox-policy'
+  config:
+    mode: !!js "process.env.DSH_VSCODE_WORKSPACE_WRITE === 'false' ? 'danger-full-access' : 'workspace-write'"
+    workspaceRoot: !!js process.env.DSH_VSCODE_WORKSPACE ?? process.cwd()
+
+# Approval: never ask in v1 — the sandbox policy is the safety boundary and
+# anything that would need a human decision is rejected automatically.
+- id: approval
+  name: '@deepseek-ai/dsh-user-approval'
+  config:
+    policy: never
+
+# Managed child-process groups for the bash executor.
+- id: subprocess
+  name: '@deepseek-ai/dsh-subprocess-local'
+
+- id: bash
+  name: '@deepseek-ai/dsh-bash-sandbox'
+  config:
+    timeoutMs: 60000
+
+# The agent spine: session log, system prompt, tool registry, agent loop,
+# skills, todo/jobs tools, agent-instructions (AGENTS.md/CLAUDE.md loader).
+- id: agent-spine
+  name: '@deepseek-ai/dsh-agent-spine-demo'
+  config:
+    includeHarnessIdentity: false
+    persona: |
+      You are a coding assistant powered by the {{model}} model, running
+      inside the user's VS Code. Your working directory is {{cwd}}.
+
+      Help the user understand, write, and change their code. Read files
+      before editing them. Verify your work by running tests or the code
+      when practical. Keep answers brief and factual; ask when a change is
+      ambiguous.
+    workspaceContext:
+      maxBytes: 65536
+    skills:
+      enabled: false
+
+# The filesystem stack rides the same sandbox policy as bash:
+# read/write/edit are confined to the workspace under workspace-write mode.
+- id: fs-sandbox
+  name: '@deepseek-ai/dsh-fs-sandbox'
+  config:
+    cwd: !!js process.env.DSH_VSCODE_WORKSPACE ?? process.cwd()
+
+- id: fs-observation-policy
+  name: '@deepseek-ai/dsh-fs-observation-policy'
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'
+
+- id: tool-todo
+  name: '@deepseek-ai/dsh-tool-todo'
+  config:
+    allowParallelInProgress: true
+
+# Replay-aware request pressure; the routed adapter supplies model capacity.
+- id: token-meter
+  name: '@deepseek-ai/dsh-token-meter'
+
+# Summarize an older range after measured pressure.
+- id: compaction-basic
+  name: '@deepseek-ai/dsh-compaction-basic'
+  config:
+    thresholdRatio: 0.8
+    retainRatio: 0.08
+    maxTokens: 8192
+    compactionRetries: 1
+
+# Durable JSONL session log. The extension points DSH_SESSION_ROOT at its
+# global storage so the user's project stays clean.
+- id: sessions
+  name: '@deepseek-ai/dsh-session-persistence-jsonl'
+  config:
+    root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'
+    compression: none

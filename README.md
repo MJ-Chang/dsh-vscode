@@ -1,0 +1,90 @@
+# dsh-vscode — DeepSeek Harness for VS Code
+
+在 VS Code 裡面像 Claude Code / Codex / Copilot 一樣使用 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：開啟一個對話面板，agent 可以讀取、編輯你開啟的專案，並執行指令。
+
+Everything is a plugin：這個 repo 同時包含 **VS Code 擴充功能** 與 **harness 端的 bridge 插件**（`runtime/plugins/vscode-bridge.mjs`），兩者都以「插件」的形式組裝在 DeepSeek Harness 之上。
+
+## 架構
+
+```
+VS Code (Webview chat UI)
+        │ postMessage
+Extension host (spawn + 事件轉譯)
+        │ stdio JSON-RPC (newline-delimited)
+┌───────▼─────────────────────────────────────────┐
+│ Harness runtime 子程序 (dsh-jsonrpc-agent)        │
+│   runtime/cordis.yml 組出的插件樹：                │
+│   • vscode-bridge  ← 我們的插件：SDK server +     │
+│     session/cancel                                │
+│   • agent spine（agent-loop、tools、session、…）   │
+│   • llm-deepseek、sandbox、bash、fs、compaction    │
+└──────────────────────────────────────────────────┘
+```
+
+- 擴充功能 spawn `dsh-jsonrpc-agent <runtime/cordis.yml>`（來自 `@deepseek-ai/dsh-sdk-jsonrpc-demo`），透過 `@deepseek-ai/dsh-sdk-client` 以 stdio JSON-RPC 驅動。
+- 原廠 SDK server 提供 `initialize` / `session/prompt` / `shutdown` 與完整 `session.event` 串流（token 級增量）；`runtime/plugins/vscode-bridge.mjs` 包住它並**新增 `session/cancel`**，讓 Webview 的 Stop 按鈕能中止進行中的回合。
+- 預設 sandbox 模式 `workspace-write`：bash 與檔案編輯被限制在開啟的工作區內；需要升級權限的操作自動拒絕（approval policy `never`）。
+
+## 功能
+
+- 側邊對話面板，串流顯示 assistant 回覆
+- 工具呼叫卡片（bash / read / write / edit / grep / glob…），可展開看參數與結果
+- Stop 按鈕（`session/cancel`）、New session（同一個 runtime 開新 session）
+- 專案編輯由 harness 的 fs + bash 工具完成，工作區即 sandbox 根目錄
+
+## 需求
+
+- VS Code ≥ 1.90
+- Node.js ≥ 20（擴充功能 spawn 本機 Node 跑 harness runtime）
+- DeepSeek API key：設定環境變數 `DEEPSEEK_API_KEY`（或在設定中指定別的變數名）
+
+## 開發
+
+```sh
+npm install
+npm run build          # esbuild → dist/extension.js
+npm run typecheck
+npm run test:runtime   # 冒煙測試：啟動 runtime + initialize + prompt + cancel（不需 key）
+```
+
+在 VS Code 打開本 repo，按 F5（Run Extension）即可啟動 Extension Development Host 測試。
+
+### 冒煙測試輸出範例（無 key 也能跑）
+
+```
+[1/5] initialize OK — deepseek-harness-sdk-runtime 0.0.1
+[2/5] prompt OK — messageId …
+[3/5] session/cancel OK — {"cancelled":true}
+[4/5] session.event stream (12 events): agent/inbox/spliced, turn/start, …
+      turn/end reason: {"kind":"error",…"code":"MISSING_CREDENTIAL"}   ← 沒設 key 的預期結果
+[5/5] closing runtime…
+SMOKE OK
+```
+
+## 設定（VS Code settings）
+
+| Key | 預設 | 說明 |
+|---|---|---|
+| `dshVscode.model` | `deepseek-v4-flash` | 對話使用的模型 |
+| `dshVscode.apiKeyEnv` | `DEEPSEEK_API_KEY` | 存放 API key 的環境變數名稱 |
+| `dshVscode.workspaceWriteOnly` | `true` | 限制 agent 只能動工作區；`false` = 完整檔案權限（小心） |
+
+## 打包與發佈
+
+```sh
+npm run package   # 產出 dsh-vscode-0.1.0.vsix（含完整 harness runtime）
+```
+
+- 對 GitHub 開源：repo 加上 `dsh-plugin` topic（社群可發現性，見 [DeepSeek Harness README](https://github.com/deepseek-ai/deepseek-harness)）。
+- `runtime/` 本身就是一個可獨立安裝的 harness 插件組合：使用者也可透過 `dsh plugin --profile <name> add github:<你>/dsh-vscode` 把這個組合裝進自己的 profile。
+
+## 已知限制（v1）
+
+- 需要使用者自行提供 `DEEPSEEK_API_KEY`；尚未整合 VS Code secret storage（v2 候選）。
+- 無 `ask` 權限流程：需要人工批准的動作直接拒絕（由 sandbox 當安全邊界）。
+- Windows 上 bash 透過 sandbox 的執行環境依賴平台能力，fs 工具的路徑限制在所有平台都生效。
+- 尚未包含 subagent / workflow / MCP 等進階能力（v2 候選）。
+
+## License
+
+MIT
