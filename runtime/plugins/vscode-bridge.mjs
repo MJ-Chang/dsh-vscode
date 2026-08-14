@@ -143,10 +143,39 @@ export function apply(ctx) {
   // executor uses and report the child's console window state. Lets tests
   // verify (in the real runtime) that children share the hidden console
   // instead of creating a visible one (the cmd-flash bug).
-  async function spawnProbe() {
+  // One shared probe: report the child's console window state.
+  const PROBE_SRC = `
+    const koffi = require(${JSON.stringify(require.resolve('koffi'))})
+    const kernel32 = koffi.load('kernel32.dll')
+    const user32 = koffi.load('user32.dll')
+    const GetConsoleWindow = kernel32.func('void* GetConsoleWindow(void)')
+    const IsWindowVisible = user32.func('int IsWindowVisible(void* hWnd)')
+    const hwnd = GetConsoleWindow()
+    console.log('PROBE=' + JSON.stringify({ hasConsole: hwnd !== null, visible: hwnd !== null ? IsWindowVisible(hwnd) !== 0 : false }))
+  `
+  const SYSTEM_NODE = 'C:\\Program Files\\nodejs\\node.exe'
+
+  async function runProbe(argv) {
     const subprocess = ctx.get('subprocess')
     if (subprocess === undefined) return { error: 'no subprocess service' }
-    // The runtime's own console state (does the hidden-console preload work?)
+    const handle = subprocess.spawn({
+      argv,
+      cwd,
+      stdio: { stdin: 'ignore', stdout: { mode: 'collect', maxBytes: 4096 }, stderr: { mode: 'collect', maxBytes: 4096 } },
+      graceMs: 15000,
+    })
+    await handle.done
+    const stdout = handle.collected?.stdout?.readFrom(0).text ?? ''
+    const stderr = handle.collected?.stderr?.readFrom(0).text ?? ''
+    const match = stdout.match(/PROBE=(\{.*\})/)
+    return match === null
+      ? { stdout: stdout.slice(0, 600), stderr: stderr.slice(0, 600) }
+      : JSON.parse(match[1])
+  }
+
+  // Diagnostic: the runtime's own console + an UNRESTRICTED console-subsystem
+  // child's console state (the plain subprocess path).
+  async function spawnProbe() {
     let runtimeConsole = 'unknown'
     try {
       const koffi = require('koffi')
@@ -156,30 +185,27 @@ export function apply(ctx) {
     } catch (error) {
       runtimeConsole = `koffi-error: ${error.message}`
     }
-    const probe = `
-      const koffi = require(${JSON.stringify(require.resolve('koffi'))})
-      const kernel32 = koffi.load('kernel32.dll')
-      const user32 = koffi.load('user32.dll')
-      const GetConsoleWindow = kernel32.func('void* GetConsoleWindow(void)')
-      const IsWindowVisible = user32.func('int IsWindowVisible(void* hWnd)')
-      const hwnd = GetConsoleWindow()
-      console.log('PROBE=' + JSON.stringify({ hasConsole: hwnd !== null, visible: hwnd !== null ? IsWindowVisible(hwnd) !== 0 : false }))
-    `
-    // A CONSOLE-subsystem child (the system node.exe) — this is the kind of
-    // process that flashes; Code.exe (GUI subsystem) never has a console.
-    const systemNode = 'C:\\Program Files\\nodejs\\node.exe'
-    const handle = subprocess.spawn({
-      argv: [systemNode, '-e', probe],
-      cwd: cwd,
-      stdio: { stdin: 'ignore', stdout: { mode: 'collect', maxBytes: 4096 }, stderr: { mode: 'collect', maxBytes: 4096 } },
-      graceMs: 10000,
-    })
-    await handle.done
-    const stdout = handle.collected?.stdout?.readFrom(0).text ?? ''
-    const stderr = handle.collected?.stderr?.readFrom(0).text ?? ''
-    const match = stdout.match(/PROBE=(\{.*\})/)
-    const child = match === null ? { stdout: stdout.slice(0, 600), stderr: stderr.slice(0, 600) } : JSON.parse(match[1])
+    const child = await runProbe([SYSTEM_NODE, '-e', PROBE_SRC])
     return { runtimeConsole, child }
+  }
+
+  // Diagnostic: a SANDBOXED child — argv through ctx.sandbox.confine, exactly
+  // what the pwsh tool does. Measures whether the windows-acl runner's
+  // restricted-token child shares the hidden console or creates a visible one.
+  async function sandboxProbe() {
+    const sandbox = ctx.get('sandbox')
+    if (sandbox === undefined) return { error: 'no sandbox service' }
+    let confined
+    try {
+      confined = sandbox.confine([SYSTEM_NODE, '-e', PROBE_SRC], {
+        mode: 'workspace-write',
+        workspaceRoot: cwd,
+      })
+    } catch (error) {
+      return { error: `confine failed: ${error.message}` }
+    }
+    const child = await runProbe(confined.argv)
+    return { argv0: confined.argv[0], enforcement: confined.enforcement, child }
   }
 
   async function createSession(params) {
@@ -304,6 +330,7 @@ export function apply(ctx) {
       case 'models/list': result = await listModels(); break
       case 'presets/list': result = await listPresets(); break
       case 'debug/spawnProbe': result = await spawnProbe(); break
+      case 'debug/sandboxProbe': result = await sandboxProbe(); break
       case 'session/new': result = await createSession(params ?? {}); break
       case 'session/prompt': result = await prompt(params ?? {}); break
       case 'session/cancel': result = await cancel(params ?? {}); break

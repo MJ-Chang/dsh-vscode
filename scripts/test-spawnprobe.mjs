@@ -62,11 +62,17 @@ try {
   await client.initialize({ cwd: workspace, provider: 'deepseek-official', model: 'deepseek-v4-flash' })
   const probe = await client.request('debug/spawnProbe', {}, 15000)
   console.log('runtime console:', probe.runtimeConsole, '| probe child:', JSON.stringify(probe.child))
+  const sandbox = await client.request('debug/sandboxProbe', {}, 15000)
+  console.log('SANDBOXED child:', JSON.stringify(sandbox))
   const ok = probe.runtimeConsole === true && probe.child?.hasConsole === true && probe.child?.visible === false
+  const sandboxOk = sandbox.child?.hasConsole === true && sandbox.child?.visible === false
   console.log(ok
     ? '\nSPAWN PROBE OK — console-subsystem runtime holds a hidden console that children inherit (no flash)'
     : '\nSPAWN PROBE: flash mechanism not resolved')
-  process.exit(ok ? 0 : 1)
+  console.log(sandboxOk
+    ? 'SANDBOX PROBE OK — sandboxed children also share the hidden console'
+    : 'SANDBOX PROBE: sandboxed child does NOT share the hidden console (this is the flash)')
+  process.exit(ok && sandboxOk ? 0 : 1)
 } catch (error) {
   console.error(`[FAIL] ${error instanceof Error ? error.message : String(error)}`)
   process.exitCode = 1
