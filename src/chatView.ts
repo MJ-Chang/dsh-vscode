@@ -82,6 +82,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             configured,
             model: config.get<string>('model', 'deepseek-v4-flash'),
             workspace: vscode.workspace.workspaceFolders?.[0]?.name ?? '',
+            workspacePath: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '',
             mode: this.runtime.currentMode(),
           })
           if (configured) {
@@ -103,6 +104,12 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           await view.webview.postMessage({ type: 'models', models })
           break
         }
+        case 'copyPath':
+          if (typeof message.text === 'string' && message.text !== '') {
+            await vscode.env.clipboard.writeText(message.text)
+            void vscode.window.showInformationMessage(`DeepSeek Harness: workspace path copied to clipboard.`)
+          }
+          break
         case 'setMode':
           if (typeof message.text === 'string' && message.text !== '') {
             await this.runtime.setMode(message.text as 'read-only' | 'workspace-write' | 'danger-full-access')

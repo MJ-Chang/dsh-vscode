@@ -28,7 +28,7 @@
   <section id="chat" class="screen" hidden>
     <header id="header">
       <div class="header-main">
-        <span id="workspace" class="workspace"></span>
+        <span id="workspace" class="workspace" title="Workspace path (click to copy)"></span>
         <button id="history-btn" class="pill" title="Conversation history">history ▾</button>
         <span id="status" class="status status-idle">idle</span>
       </div>
@@ -54,8 +54,8 @@
           <span id="model-name" class="select-btn-value">…</span>
           <span class="select-btn-caret">▾</span>
         </button>
-        <button id="mode-btn" class="pill mode-pill" title="Permission mode">
-          <span id="mode-name">…</span>
+        <button id="mode-btn" class="pill mode-pill" title="Permission mode — click to change">
+          <span id="mode-name">…</span><span class="select-btn-caret">▾</span>
         </button>
         <span id="usage" class="usage" title="Tokens used this conversation">0↑ · 0↓</span>
         <span class="spacer"></span>

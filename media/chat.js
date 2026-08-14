@@ -47,6 +47,7 @@
   let currentModel = ''
   let currentMode = 'workspace-write'
   let modelCatalog = []
+  let workspacePath = ''
   let attachments = []
   let usageInput = 0
   let usageOutput = 0
@@ -296,12 +297,23 @@
     vscode.postMessage({ type: 'pickFiles' })
   })
 
+  workspaceEl.addEventListener('click', () => {
+    if (workspacePath !== '') {
+      vscode.postMessage({ type: 'copyPath', text: workspacePath })
+    }
+  })
+
   historyBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'listSessions' })
   })
 
   document.addEventListener('click', (event) => {
-    if (!event.target.closest('.menu')) closeMenus()
+    // Close menus only when the click lands outside every menu AND outside
+    // the buttons that open them (otherwise a menu opens and instantly closes).
+    const inside = event.target.closest(
+      '.menu-layer, #model-btn, #mode-btn, #history-btn',
+    )
+    if (!inside) closeMenus()
   })
 
   // ---------- host events ----------
@@ -331,13 +343,15 @@
     if (messagesEl.querySelector('.msg, .tool-card') === null) showWelcome()
   }
 
-  function onState({ configured, model, workspace, mode }) {
+  function onState({ configured, model, workspace, workspacePath: wsPath, mode }) {
     currentModel = model
     currentMode = mode ?? 'workspace-write'
     modelName.textContent = model
     modeName.textContent = MODE_LABELS[currentMode]
     modePill.dataset.mode = currentMode
+    workspacePath = wsPath ?? ''
     workspaceEl.textContent = workspace || 'no workspace'
+    workspaceEl.title = workspacePath !== '' ? `Workspace: ${workspacePath} (click to copy)` : ''
     if (configured) {
       showChat()
       setStatus('starting')

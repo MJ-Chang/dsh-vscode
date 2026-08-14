@@ -44,7 +44,7 @@ await tick()
 check('webview posts ready on load', posted.some((m) => m.type === 'ready'))
 
 // --- unconfigured state → setup screen ---
-await post({ type: 'state', configured: false, model: 'deepseek-v4-flash', workspace: 'demo', mode: 'workspace-write' })
+await post({ type: 'state', configured: false, model: 'deepseek-v4-flash', workspace: 'demo', workspacePath: 'C:/demo', mode: 'workspace-write' })
 check('setup screen visible when not configured', !document.getElementById('setup').hidden)
 
 // --- setupKey flow ---
@@ -67,6 +67,31 @@ await post({
   ],
 })
 check('model pill shows a model', document.getElementById('model-name').textContent !== '')
+
+// --- model menu opens and stays open (regression: instant-close bug) ---
+document.getElementById('model-btn').click()
+await tick()
+check('model menu stays open after clicking its button', !document.getElementById('model-menu').hidden)
+const proItem = [...document.querySelectorAll('#model-menu .menu-item')].find((el) => el.textContent.includes('DeepSeek V4 Pro'))
+proItem?.click()
+await tick()
+check('selecting a model posts setModel', posted.some((m) => m.type === 'setModel' && m.text === 'deepseek-v4-pro'))
+check('model pill updates', document.getElementById('model-name').textContent === 'deepseek-v4-pro')
+
+// --- mode menu opens and switching posts setMode ---
+document.getElementById('mode-btn').click()
+await tick()
+check('mode menu stays open after clicking its button', !document.getElementById('mode-menu').hidden)
+const readOnlyItem = [...document.querySelectorAll('#mode-menu .menu-item')].find((el) => el.textContent.includes('Read-only'))
+readOnlyItem?.click()
+await tick()
+check('selecting a mode posts setMode', posted.some((m) => m.type === 'setMode' && m.text === 'read-only'))
+check('mode pill updates', document.getElementById('mode-name').textContent === 'Read-only')
+
+// --- workspace copies its path ---
+document.getElementById('workspace').click()
+await tick()
+check('workspace click posts copyPath', posted.some((m) => m.type === 'copyPath'))
 
 // --- sessions (history menu) ---
 await post({ type: 'sessions', sessions: [{ sessionId: 'abc123', createdAt: Date.now() }] })
