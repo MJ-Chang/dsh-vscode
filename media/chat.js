@@ -1,11 +1,17 @@
 /**
- * dsh-vscode chat webview: renders the harness event stream and forwards user
- * actions to the extension host over postMessage.
+ * dsh-vscode chat webview: setup screen (API key) + chat screen, renders the
+ * harness event stream, and forwards user actions to the extension host.
  */
 (() => {
   'use strict'
 
   const vscode = acquireVsCodeApi()
+
+  const setupEl = document.getElementById('setup')
+  const chatEl = document.getElementById('chat')
+  const keyInput = document.getElementById('key-input')
+  const connectBtn = document.getElementById('connect-btn')
+  const setupError = document.getElementById('setup-error')
 
   const messagesEl = document.getElementById('messages')
   const inputEl = document.getElementById('input')
@@ -13,20 +19,22 @@
   const stopBtn = document.getElementById('stop')
   const newSessionBtn = document.getElementById('new-session')
   const statusEl = document.getElementById('status')
-  const metaEl = document.getElementById('meta')
+  const modelEl = document.getElementById('model')
+  const workspaceEl = document.getElementById('workspace')
 
   let status = 'starting'
-  let assistantBlock = null   // the DOM node of the streaming assistant message
-  let assistantText = ''
   let busy = false
-  const toolCards = new Map() // callId -> { name, card, stateEl, resultEl }
+  let assistantBlock = null
+  let assistantText = ''
+  const toolCards = new Map()
 
-  /** Escape HTML so user/model text can never inject markup. */
+  // ---------- utilities ----------
+
   const escapeHtml = (text) =>
     text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
-  /** Minimal, safe markdown: fenced code, inline code, bold, line breaks. */
+  /** Minimal, safe markdown: fenced code, inline code, bold, italic, links, lists, headings. */
   function renderMarkdown(text) {
     const parts = []
     const fence = /```([\w+-]*)\n?([\s\S]*?)```/g
@@ -34,7 +42,10 @@
     let match
     while ((match = fence.exec(text)) !== null) {
       parts.push(renderInline(text.slice(last, match.index)))
-      parts.push(`<pre><code>${escapeHtml(match[2].replace(/\n$/, ''))}</code></pre>`)
+      const lang = match[1]
+      const code = escapeHtml(match[2].replace(/\n$/, ''))
+      parts.push(lang ? `<pre><code data-lang="${escapeHtml(lang)}">${code}</code></pre>`
+                      : `<pre><code>${code}</code></pre>`)
       last = fence.lastIndex
     }
     parts.push(renderInline(text.slice(last)))
@@ -46,11 +57,41 @@
     return escaped
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/(^|\s)\*([^*\n]+)\*(?=\s|$)/g, '$1<em>$2</em>')
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, '<a href="$2">$1</a>')
   }
 
-  function scrollToBottom() {
-    messagesEl.scrollTop = messagesEl.scrollHeight
+  function renderBlock(text) {
+    const lines = text.split('\n')
+    const out = []
+    let inList = false
+    for (const line of lines) {
+      const heading = line.match(/^(#{1,4})\s+(.*)$/)
+      if (heading) {
+        if (inList) { out.push('</ul>'); inList = false }
+        const level = heading[1].length
+        out.push(`<h${level}>${renderInline(heading[2])}</h${level}>`)
+        continue
+      }
+      const bullet = line.match(/^\s*[-*]\s+(.*)$/)
+      if (bullet) {
+        if (!inList) { out.push('<ul>'); inList = true }
+        out.push(`<li>${renderInline(bullet[1])}</li>`)
+        continue
+      }
+      if (/^\s*$/.test(line)) {
+        if (inList) { out.push('</ul>'); inList = false }
+        out.push('<br>')
+        continue
+      }
+      if (inList) { out.push('</ul>'); inList = false }
+      out.push(renderInline(line))
+    }
+    if (inList) out.push('</ul>')
+    return out.join('')
   }
+
+  function scrollToBottom() { messagesEl.scrollTop = messagesEl.scrollHeight }
 
   function addMessageEl(className, html) {
     const el = document.createElement('div')
@@ -59,6 +100,24 @@
     messagesEl.appendChild(el)
     scrollToBottom()
     return el
+  }
+
+  // ---------- screens ----------
+
+  function showSetup(message) {
+    chatEl.hidden = true
+    setupEl.hidden = false
+    if (message) {
+      setupError.textContent = message
+      setupError.hidden = false
+    }
+    keyInput.focus()
+  }
+
+  function showChat() {
+    setupEl.hidden = true
+    chatEl.hidden = false
+    inputEl.focus()
   }
 
   // ---------- status ----------
@@ -70,16 +129,29 @@
     busy = next === 'busy' || next === 'starting'
     stopBtn.disabled = !busy
     sendBtn.disabled = next === 'starting' || next === 'error'
+    inputEl.disabled = next === 'starting'
   }
 
-  function setMeta(text) {
-    metaEl.textContent = text
+  // ---------- events ----------
+
+  function onState({ configured, model, workspace }) {
+    modelEl.textContent = model
+    workspaceEl.textContent = workspace
+    if (configured) {
+      showChat()
+      setStatus('starting')
+    } else {
+      showSetup()
+    }
   }
 
-  // ---------- rendering events ----------
+  function onConfigured() {
+    showChat()
+    setStatus('ready')
+  }
 
   function onSessionId({ sessionId }) {
-    setMeta(`session ${sessionId.slice(0, 8)} · runtime ready`)
+    workspaceEl.textContent = workspaceEl.textContent || ''
   }
 
   function onSystemMessage({ text }) {
@@ -92,15 +164,13 @@
       assistantText = ''
     }
     assistantText += text
-    assistantBlock.innerHTML = renderMarkdown(assistantText)
+    assistantBlock.innerHTML = renderBlock(assistantText)
     assistantBlock.classList.add('streaming')
     scrollToBottom()
   }
 
   function onAssistantDone() {
-    if (assistantBlock !== null) {
-      assistantBlock.classList.remove('streaming')
-    }
+    if (assistantBlock !== null) assistantBlock.classList.remove('streaming')
     assistantBlock = null
     assistantText = ''
   }
@@ -150,7 +220,6 @@
         record.resultEl.style.display = 'block'
       }
     } else {
-      // Result without a visible call (e.g. panel reopened mid-turn).
       const text = `${ok ? '✓' : '✗'} ${name}${summary !== '' ? ` — ${summary}` : ''}`
       addMessageEl('system', escapeHtml(text))
     }
@@ -158,8 +227,14 @@
 
   function onError({ message }) {
     onAssistantDone()
-    addMessageEl('system', escapeHtml(`⚠ ${message}`))
-    setStatus('error')
+    if (setupEl.hidden === false) {
+      // Key setup failed — stay on the setup screen with the error.
+      showSetup(message)
+      connectBtn.disabled = false
+    } else {
+      addMessageEl('system', escapeHtml(`⚠ ${message}`))
+      setStatus('error')
+    }
   }
 
   function onClear() {
@@ -174,7 +249,9 @@
   window.addEventListener('message', (event) => {
     const message = event.data
     switch (message.type) {
-      case 'status': setStatus(message.status); if (message.detail) onError({ message: message.detail }); break
+      case 'state': onState(message); break
+      case 'configured': onConfigured(); break
+      case 'status': setStatus(message.status); break
       case 'sessionId': onSessionId(message); break
       case 'systemMessage': onSystemMessage(message); break
       case 'assistantDelta': onAssistantDelta(message); break
@@ -189,9 +266,22 @@
 
   // ---------- user actions ----------
 
+  async function connect() {
+    const key = keyInput.value.trim()
+    if (key === '') return
+    connectBtn.disabled = true
+    setupError.hidden = true
+    vscode.postMessage({ type: 'setupKey', text: key })
+  }
+
+  connectBtn.addEventListener('click', connect)
+  keyInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); void connect() }
+  })
+
   function send() {
     const text = inputEl.value.trim()
-    if (text === '' || busy && status !== 'idle') return
+    if (text === '' || busy) return
     inputEl.value = ''
     inputEl.style.height = 'auto'
     addMessageEl('user', escapeHtml(text))
@@ -208,7 +298,6 @@
   stopBtn.addEventListener('click', () => { vscode.postMessage({ type: 'stop' }) })
   newSessionBtn.addEventListener('click', () => { vscode.postMessage({ type: 'newSession' }) })
 
-  setStatus('starting')
-  setMeta('connecting to the DeepSeek Harness runtime…')
+  // Ask the host for the current state (configured? model? workspace?).
   vscode.postMessage({ type: 'ready' })
 })()

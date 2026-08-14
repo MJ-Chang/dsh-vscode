@@ -3,31 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta http-equiv="Content-Security-Policy"
-        content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}'; img-src {{cspSource}};">
+        content="default-src 'none'; style-src {{cspSource}}; script-src 'nonce-{{nonce}}'; img-src {{cspSource}} data:;">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DeepSeek Harness</title>
   <link rel="stylesheet" href="{{cssUri}}">
 </head>
 <body>
-  <header id="header">
-    <div class="title-row">
-      <span class="title">DeepSeek Harness</span>
-      <span id="status" class="status status-idle">idle</span>
-    </div>
-    <div id="meta" class="meta">runtime starting…</div>
-  </header>
 
-  <main id="messages" class="messages" aria-live="polite"></main>
+  <!-- ============ SETUP SCREEN ============ -->
+  <section id="setup" class="screen">
+    <div class="setup-card">
+      <div class="logo">DSH</div>
+      <h1 class="setup-title">DeepSeek Harness</h1>
+      <p class="setup-subtitle">Coding agent in your editor — powered by DeepSeek Harness.</p>
 
-  <footer id="composer">
-    <textarea id="input" rows="2" placeholder="Ask the agent to help with your code… (Enter to send, Shift+Enter for newline)"
-              aria-label="Message"></textarea>
-    <div class="actions">
-      <button id="new-session" class="btn" title="Start a new conversation">New session</button>
-      <button id="stop" class="btn btn-danger" title="Stop the current turn" disabled>Stop</button>
-      <button id="send" class="btn btn-primary" title="Send">Send</button>
+      <label class="field-label" for="key-input">API Key</label>
+      <input id="key-input" type="password" class="key-input" placeholder="sk-…"
+             autocomplete="off" spellcheck="false" autofocus>
+      <button id="connect-btn" class="connect-btn">Connect</button>
+
+      <p id="setup-error" class="setup-error" hidden></p>
+      <p class="setup-hint">Your key is stored in VS Code's secret storage. It never leaves this machine.</p>
+      <p class="setup-hint dim">Alternatively export <code>DEEPSEEK_API_KEY</code> in your environment, or add it to the workspace <code>.env</code>.</p>
     </div>
-  </footer>
+  </section>
+
+  <!-- ============ CHAT SCREEN ============ -->
+  <section id="chat" class="screen" hidden>
+    <header id="header">
+      <div class="header-row">
+        <span class="brand">DeepSeek Harness</span>
+        <span id="status" class="status status-idle">idle</span>
+      </div>
+      <div class="header-row sub">
+        <span id="model" class="model"></span>
+        <span id="workspace" class="workspace"></span>
+        <button id="new-session" class="icon-btn" title="New session">＋</button>
+      </div>
+    </header>
+
+    <main id="messages" class="messages" aria-live="polite"></main>
+
+    <footer id="composer">
+      <textarea id="input" rows="2" placeholder="Ask to read, write, or change your project… (Enter to send)"
+                aria-label="Message"></textarea>
+      <div class="actions">
+        <button id="stop" class="btn stop-btn" title="Stop the current turn" disabled>Stop</button>
+        <button id="send" class="btn send-btn" title="Send">Send</button>
+      </div>
+    </footer>
+  </section>
 
   <script nonce="{{nonce}}" src="{{jsUri}}"></script>
 </body>

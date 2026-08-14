@@ -1,41 +1,17 @@
 /**
- * dsh-vscode extension entry: commands, runtime lifecycle, sidebar chat view,
- * and API-key management (VS Code SecretStorage with an env-var fallback).
+ * dsh-vscode extension entry: commands, runtime lifecycle, right-side chat
+ * view, and API-key management (VS Code SecretStorage, entered inside the
+ * chat view).
  */
 
 import * as vscode from 'vscode'
-import { ChatViewProvider } from './chatView'
+import { CHAT_VIEW_ID, CHAT_VIEW_ID_SECONDARY, ChatViewProvider } from './chatView'
 import { HarnessRuntime } from './runtime'
 
 const API_KEY_SECRET = 'dshVscode.apiKey'
 
 let runtime: HarnessRuntime | undefined
 let chatProvider: ChatViewProvider | undefined
-
-/**
- * Resolve the API key the runtime should use, prompting the user on first use.
- * Priority: secret storage → inherited environment variable → user input.
- * @returns the key, or `undefined` when the user dismisses the prompt.
- */
-async function ensureApiKey(context: vscode.ExtensionContext): Promise<string | undefined> {
-  const config = vscode.workspace.getConfiguration('dshVscode')
-  const apiKeyEnv = config.get<string>('apiKeyEnv', 'DEEPSEEK_API_KEY')
-
-  const stored = await context.secrets.get(API_KEY_SECRET)
-  if (stored !== undefined && stored !== '') return stored
-  if (process.env[apiKeyEnv] !== undefined && process.env[apiKeyEnv] !== '') return undefined
-
-  const input = await vscode.window.showInputBox({
-    title: 'DeepSeek Harness',
-    prompt: `Enter your DeepSeek API key (stored in VS Code's secret storage). It will be used for all chat requests.`,
-    password: true,
-    ignoreFocusOut: true,
-    validateInput: (value) => value.trim() === '' ? 'The key cannot be empty.' : undefined,
-  })
-  if (input === undefined || input.trim() === '') return undefined
-  await context.secrets.store(API_KEY_SECRET, input.trim())
-  return input.trim()
-}
 
 /** Lazily create the workspace-bound runtime; warns when no folder is open. */
 function getRuntime(context: vscode.ExtensionContext): HarnessRuntime | undefined {
@@ -59,12 +35,20 @@ function getRuntime(context: vscode.ExtensionContext): HarnessRuntime | undefine
   return runtime
 }
 
-/** Activate the extension: register the sidebar view and commands. */
+/** Activate the extension: register the right-side chat view and commands. */
 export function activate(context: vscode.ExtensionContext): void {
+  // Modern VS Code has the secondary side bar; the activity-bar fallback
+  // container is gated behind the inverse context key (see package.json).
+  void vscode.commands.executeCommand(
+    'setContext',
+    'dshVscode.doesNotSupportSecondarySidebar',
+    false,
+  )
+
   context.subscriptions.push(
     vscode.commands.registerCommand('dshVscode.openChat', () => {
       if (getRuntime(context) === undefined) return
-      void vscode.commands.executeCommand('dsh-vscode-chat-view.focus')
+      void vscode.commands.executeCommand(`${CHAT_VIEW_ID_SECONDARY}.focus`)
     }),
   )
 
@@ -72,8 +56,6 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('dshVscode.startRuntime', async () => {
       const target = getRuntime(context)
       if (target === undefined) return
-      const apiKey = await ensureApiKey(context)
-      target.setApiKey(apiKey)
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -112,11 +94,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   const target = getRuntime(context)
   if (target !== undefined) {
-    chatProvider = new ChatViewProvider(context, target, () => ensureApiKey(context))
+    chatProvider = new ChatViewProvider(context, target)
+    const viewOptions = { webviewOptions: { retainContextWhenHidden: true } }
     context.subscriptions.push(
-      vscode.window.registerWebviewViewProvider('dsh-vscode-chat-view', chatProvider, {
-        webviewOptions: { retainContextWhenHidden: true },
-      }),
+      vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, chatProvider, viewOptions),
+      vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID_SECONDARY, chatProvider, viewOptions),
     )
   }
 }

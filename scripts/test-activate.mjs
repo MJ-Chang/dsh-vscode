@@ -62,10 +62,11 @@ try {
   console.log('activate() ran without throwing')
   console.log('registered commands:', registeredCommands.join(', '))
   console.log('registered webview views:', registeredViews.join(', '))
-  if (registeredViews.includes('dsh-vscode-chat-view')) {
-    console.log('SIDEBAR VIEW REGISTERED OK')
+  if (registeredViews.includes('dsh-vscode-chat-view')
+    && registeredViews.includes('dsh-vscode-chat-view-secondary')) {
+    console.log('SIDEBAR VIEWS REGISTERED OK (primary + secondary)')
   } else {
-    console.error('FAIL: chatView was not registered')
+    console.error('FAIL: chat views were not registered:', registeredViews.join(', '))
     process.exitCode = 1
   }
   ext.deactivate()

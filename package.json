@@ -18,7 +18,8 @@
     "onCommand:dshVscode.startRuntime",
     "onCommand:dshVscode.setApiKey",
     "onCommand:dshVscode.clearApiKey",
-    "onView:dsh-vscode-chat-view"
+    "onView:dsh-vscode-chat-view",
+    "onView:dsh-vscode-chat-view-secondary"
   ],
   "contributes": {
     "viewsContainers": {
@@ -26,7 +27,16 @@
         {
           "id": "dsh-vscode-chat",
           "title": "DeepSeek Harness",
-          "icon": "media/icon.svg"
+          "icon": "media/icon.svg",
+          "when": "dshVscode.doesNotSupportSecondarySidebar"
+        }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "dsh-vscode-chat-secondary",
+          "title": "DeepSeek Harness",
+          "icon": "media/icon.svg",
+          "when": "!dshVscode.doesNotSupportSecondarySidebar"
         }
       ]
     },
@@ -37,7 +47,18 @@
           "id": "dsh-vscode-chat-view",
           "name": "Chat",
           "icon": "media/icon.svg",
-          "contextualTitle": "DeepSeek Harness Chat"
+          "contextualTitle": "DeepSeek Harness Chat",
+          "when": "dshVscode.doesNotSupportSecondarySidebar"
+        }
+      ],
+      "dsh-vscode-chat-secondary": [
+        {
+          "type": "webview",
+          "id": "dsh-vscode-chat-view-secondary",
+          "name": "Chat",
+          "icon": "media/icon.svg",
+          "contextualTitle": "DeepSeek Harness Chat",
+          "when": "!dshVscode.doesNotSupportSecondarySidebar"
         }
       ]
     },

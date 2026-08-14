@@ -1,29 +1,40 @@
 /**
- * Sidebar chat view (like Copilot Chat): a WebviewView under the DeepSeek
- * Harness activity-bar container. Renders media/chat.html and routes messages
- * between the webview and the HarnessRuntime.
+ * Right-side sidebar chat view (like Codex / Claude Code / Copilot Chat):
+ * a WebviewView under the DeepSeek Harness secondary-sidebar container.
+ *
+ * Renders media/chat.html and routes messages between the webview and the
+ * HarnessRuntime. The API key is entered INSIDE the view (a setup screen)
+ * and stored in VS Code secret storage — no pop-up input boxes.
  */
 
 import { readFileSync } from 'node:fs'
 import * as vscode from 'vscode'
 import { HarnessRuntime, type UiEvent } from './runtime'
 
-/** The chat view id contributed under `views` in package.json. */
+/** Primary (activity bar) view id — used only when the secondary sidebar is unavailable. */
 export const CHAT_VIEW_ID = 'dsh-vscode-chat-view'
+/** Secondary (right sidebar) view id — the default on modern VS Code. */
+export const CHAT_VIEW_ID_SECONDARY = 'dsh-vscode-chat-view-secondary'
+
+const API_KEY_SECRET = 'dshVscode.apiKey'
+
+interface WebviewMessage {
+  type: string
+  text?: string
+}
 
 /**
  * WebviewViewProvider for the sidebar chat. One provider per extension
- * lifetime; the runtime is shared across view resolutions.
+ * lifetime, registered for both view ids; the runtime is shared.
  */
 export class ChatViewProvider implements vscode.WebviewViewProvider {
   private readonly cleanup = new Set<() => void>()
   private view: vscode.WebviewView | undefined
 
-  /** @param context - the extension context (for resource URIs). */
+  /** @param context - the extension context (resources, secrets). */
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly runtime: HarnessRuntime,
-    private readonly ensureApiKey: () => Promise<string | undefined>,
   ) {}
 
   /** Resolve (or re-resolve) the webview view when VS Code shows it. */
@@ -41,7 +52,7 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
       void webviewView.webview.postMessage(event)
     })
     const messageDisposable = webviewView.webview.onDidReceiveMessage(
-      (message: { type: string; text?: string }) => { void this.handleMessage(message) },
+      (message: WebviewMessage) => { void this.handleMessage(message) },
     )
     this.cleanup.add(unsubscribe)
     this.cleanup.add(() => messageDisposable.dispose())
@@ -53,15 +64,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     })
   }
 
-  private async handleMessage(message: { type: string; text?: string }): Promise<void> {
+  private async handleMessage(message: WebviewMessage): Promise<void> {
     const view = this.view
     if (view === undefined) return
     try {
       switch (message.type) {
-        case 'ready':
-          this.runtime.setApiKey(await this.ensureApiKey())
-          await this.runtime.start()
+        case 'ready': {
+          const config = vscode.workspace.getConfiguration('dshVscode')
+          const apiKeyEnv = config.get<string>('apiKeyEnv', 'DEEPSEEK_API_KEY')
+          const stored = await this.context.secrets.get(API_KEY_SECRET)
+          const configured = (stored !== undefined && stored !== '')
+            || (process.env[apiKeyEnv] !== undefined && process.env[apiKeyEnv] !== '')
+          await view.webview.postMessage({
+            type: 'state',
+            configured,
+            model: config.get<string>('model', 'deepseek-v4-flash'),
+            workspace: vscode.workspace.workspaceFolders?.[0]?.name ?? '',
+          })
+          if (configured) {
+            this.runtime.setApiKey(stored ?? undefined)
+            await this.runtime.start()
+          }
           break
+        }
+        case 'setupKey': {
+          const key = (message.text ?? '').trim()
+          if (key === '') return
+          await this.context.secrets.store(API_KEY_SECRET, key)
+          this.runtime.setApiKey(key)
+          await this.runtime.start()
+          await view.webview.postMessage({ type: 'configured' })
+          break
+        }
         case 'prompt':
           if (typeof message.text === 'string' && message.text.trim() !== '') {
             await this.runtime.prompt(message.text)
