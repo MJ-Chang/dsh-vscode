@@ -5,3 +5,6 @@ dist-types/
 .DS_Store
 .env
 runtime/.sessions/
+.smoke-sessions/
+.smoke-workspace/
+smoke-output.txt
