@@ -68,9 +68,10 @@ Extension host (spawn + 事件轉譯)
 
 ## 需求
 
-- VS Code ≥ 1.90
-- Node.js ≥ 20（擴充功能 spawn 本機 Node 跑 harness runtime）
-- DeepSeek API key（三種提供方式，見下）
+- **VS Code ≥ 1.90**（唯一硬性需求）
+- **DeepSeek API key**（設定畫面輸入一次，或環境變數 / `.env`）
+- **Node.js（建議，非必須）**：安裝後 Windows 上執行指令不會閃視窗；**沒裝也能用**——自動改用 VS Code 內建的執行環境，但 Windows 上 shell 指令可能閃出 console 視窗
+- **npm / pnpm 完全不需要**：核心功能（對話、讀寫檔案、執行指令）不碰套件管理器；只有選用的「Install Plugin」功能需要 Node.js 附帶的 npm
 
 ## 設定 API key（三選一）
 

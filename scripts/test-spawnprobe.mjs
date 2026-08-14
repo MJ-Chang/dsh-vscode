@@ -24,12 +24,16 @@ const runtimeNode = 'C:\\Program Files\\nodejs\\node.exe'
 const preload = path.join(root, 'runtime', 'preload-spawn.cjs').replace(/\\/g, '/')
 const bin = require.resolve('@deepseek-ai/dsh-sdk-jsonrpc-demo/bin')
 
-// compile plugins.ts for the effective config
+// compile plugins.ts for the effective config (bundle local modules; yaml
+// stays external — the real extension bundle is CJS and bundles it fine)
 const buildDir = path.join(root, '.test-build')
 await mkdir(buildDir, { recursive: true })
 await build({
   entryPoints: [path.join(root, 'src/plugins.ts')],
-  bundle: false,
+  bundle: true,
+  format: 'esm',
+  platform: 'node',
+  external: ['yaml'],
   format: 'esm',
   platform: 'node',
   outfile: path.join(buildDir, 'plugins.mjs'),

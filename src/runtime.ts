@@ -15,6 +15,7 @@ import { createRequire } from 'node:module'
 import * as path from 'node:path'
 import type { ContentBlock, NotificationSubscription } from '@deepseek-ai/dsh-sdk-client'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { resolveSystemNode } from './node-resolve'
 import { generateEffectiveConfig } from './plugins'
 
 type SdkModule = typeof import('@deepseek-ai/dsh-sdk-client')
@@ -95,30 +96,7 @@ export function resolveRuntimeBin(extensionPath: string): string {
  * harness runs.
  */
 export function resolveRuntimeNode(): string {
-  if (process.platform !== 'win32') return process.execPath
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { existsSync } = require('node:fs') as typeof import('node:fs')
-  const candidates: string[] = [
-    'C:\\Program Files\\nodejs\\node.exe',
-    'C:\\Program Files (x86)\\nodejs\\node.exe',
-  ]
-  for (const dir of (process.env.Path ?? '').split(';')) {
-    if (dir !== '') candidates.push(path.join(dir.trim(), 'node.exe'))
-  }
-  // npm_node_execpath is unreliable under pnpm shims (it can point at pnpm's
-  // exe); only accept a real node.exe outside a package-manager store.
-  const npmNode = process.env.npm_node_execpath
-  if (npmNode !== undefined && /node\.exe$/i.test(npmNode)
-    && !/pnpm|\.pnpm|npm-cache|_store/i.test(npmNode)) {
-    candidates.unshift(npmNode)
-  }
-  for (const candidate of candidates) {
-    if (candidate !== undefined && candidate !== '' && existsSync(candidate)
-      && !candidate.toLowerCase().includes('microsoft vs code')) {
-      return candidate
-    }
-  }
-  return process.execPath
+  return resolveSystemNode()
 }
 
 let sdkPromise: Promise<SdkModule> | undefined

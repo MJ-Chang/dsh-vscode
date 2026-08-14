@@ -15,6 +15,7 @@ import * as path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
+import { npmCliBesideNode, resolveSystemNode } from './node-resolve'
 
 const execFileAsync = promisify(execFile)
 
@@ -49,19 +50,21 @@ function npmCommand(): string {
  * to the platform npm executable.
  * @returns a spawn-ready [command, args] pair.
  */
-function npmSpawn(args: string[]): [string, string[]] {
+function npmSpawn(args: string[]): [string, string[], boolean] {
   const candidates = [
     process.env.npm_execpath,
-    path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+    npmCliBesideNode(process.execPath),
+    npmCliBesideNode(resolveSystemNode()),
   ]
   for (const candidate of candidates) {
     // Only JS entry points can be run through node; npm_execpath can point at
     // a native executable (e.g. pnpm's exe) which node cannot load.
     if (candidate !== undefined && candidate !== '' && /\.(js|mjs|cjs)$/i.test(candidate)) {
-      return [process.execPath, [candidate, ...args]]
+      return [process.execPath, [candidate, ...args], false]
     }
   }
-  return [npmCommand(), args]
+  // Last resort: the platform npm executable (needs a shell on Windows).
+  return [npmCommand(), args, process.platform === 'win32']
 }
 
 /** Run npm in the plugins directory. */
@@ -81,17 +84,18 @@ async function runNpm(args: string[], paths: PluginPaths): Promise<string> {
     }, null, 2), 'utf8')
   }
   try {
-    const [command, spawnArgs] = npmSpawn(args)
+    const [command, spawnArgs, useShell] = npmSpawn(args)
     const { stdout } = await execFileAsync(command, spawnArgs, {
       cwd: dir,
       windowsHide: true,
+      shell: useShell,
       timeout: 180_000,
     })
     return stdout
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     throw new Error(
-      `npm ${args.join(' ')} failed. Is Node.js/npm installed and on PATH?\n${detail}`,
+      `npm ${args.join(' ')} failed. Plugin installation needs Node.js (which includes npm) — install it from https://nodejs.org, then retry.\n${detail}`,
     )
   }
 }

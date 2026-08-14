@@ -17,15 +17,17 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const require = createRequire(import.meta.url)
 
 // --- 1. compile src/plugins.ts standalone so the test exercises the real code ---
-// Not bundled: the CJS yaml package cannot be converted to ESM by esbuild;
-// the real extension bundle (CJS output) bundles it fine.
+// Bundle local modules (plugins.ts → node-resolve); keep the CJS yaml package
+// external — esbuild cannot convert it to ESM, but the real extension bundle
+// (CJS output) bundles it fine.
 const buildDir = path.join(root, '.test-build')
 await mkdir(buildDir, { recursive: true })
 await build({
   entryPoints: [path.join(root, 'src/plugins.ts')],
-  bundle: false,
+  bundle: true,
   format: 'esm',
   platform: 'node',
+  external: ['yaml'],
   outfile: path.join(buildDir, 'plugins.mjs'),
   logLevel: 'silent',
 })
