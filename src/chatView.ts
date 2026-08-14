@@ -120,9 +120,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           break
         case 'resumeSession':
           if (typeof message.text === 'string' && message.text !== '') {
-            await this.runtime.resumeSession(message.text)
+            const events = await this.runtime.resumeSession(message.text)
             await view.webview.postMessage({ type: 'clear' })
-            await view.webview.postMessage({ type: 'systemMessage', text: 'Resumed a previous conversation.' })
+            await view.webview.postMessage({ type: 'transcript', events })
           }
           break
         case 'listSessions': {

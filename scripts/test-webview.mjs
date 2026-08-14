@@ -68,15 +68,27 @@ await post({
 })
 check('model pill shows a model', document.getElementById('model-name').textContent !== '')
 
-// --- sessions ---
+// --- sessions (history menu) ---
 await post({ type: 'sessions', sessions: [{ sessionId: 'abc123', createdAt: Date.now() }] })
-check('history list rendered', document.querySelectorAll('.message-container').length > 0)
+check('history menu opened', !document.getElementById('history-menu').hidden)
+check('history menu has an item', document.querySelectorAll('#history-menu .menu-item').length > 0)
+
+// --- transcript (resumed conversation) ---
+await post({
+  type: 'transcript',
+  events: [
+    { type: 'user/message', data: { content: [{ type: 'text', text: 'earlier question' }], source: { kind: 'user' } } },
+    { type: 'assistant/message', data: { message: { content: [{ type: 'text', text: 'earlier answer' }] } } },
+  ],
+})
+check('transcript renders user message', [...document.querySelectorAll('.msg.user')].some((el) => el.textContent.includes('earlier question')))
+check('transcript renders assistant message', [...document.querySelectorAll('.msg.assistant')].some((el) => el.textContent.includes('earlier answer')))
 
 // --- streaming assistant ---
 await post({ type: 'assistantDelta', text: 'Hello, ' })
 await post({ type: 'assistantDelta', text: 'world!' })
-const assistant = document.querySelector('.msg.assistant')
-check('assistant message rendered', assistant !== null && assistant.textContent.includes('world'))
+const assistants = [...document.querySelectorAll('.msg.assistant')]
+check('assistant message rendered', assistants.some((el) => el.textContent.includes('world')))
 
 // --- tool call + result ---
 await post({ type: 'toolCall', callId: 'call-1', name: 'bash', args: '{"command":"ls"}' })
@@ -115,13 +127,15 @@ check('prompt posted', promptMsg !== undefined)
 check('prompt carries attachments', Array.isArray(promptMsg?.files) && promptMsg.files.length === 1 && promptMsg.files[0].name === 'src/main.ts')
 check('attachments cleared after send', document.querySelectorAll('.attachment-chip').length === 0)
 
-// --- error path ---
+// --- error path (composer must NOT strand) ---
 await post({ type: 'error', message: 'runtime exploded' })
 check('error surfaced as a message', [...document.querySelectorAll('.msg.system')].some((el) => el.textContent.includes('runtime exploded')))
+check('send still enabled after error', !document.getElementById('send-btn').disabled)
 
 // --- clear ---
 await post({ type: 'clear' })
 check('clear empties messages', document.querySelectorAll('.msg').length === 0)
+check('welcome hint shown after clear', document.querySelector('.welcome') !== null)
 
 console.log(failed ? '\nWEBVIEW TEST FAILED' : '\nWEBVIEW TEST OK')
 process.exit(failed ? 1 : 0)

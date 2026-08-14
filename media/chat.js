@@ -31,6 +31,7 @@
   const menuLayer = document.getElementById('menu-layer')
   const modelMenu = document.getElementById('model-menu')
   const modeMenu = document.getElementById('mode-menu')
+  const historyMenu = document.getElementById('history-menu')
 
   const MODE_LABELS = {
     'read-only': 'Read-only',
@@ -49,6 +50,7 @@
   let attachments = []
   let usageInput = 0
   let usageOutput = 0
+  let welcomeEl = null
   const toolCards = new Map()
 
   // ---------- utils ----------
@@ -162,7 +164,8 @@
     statusEl.textContent = next
     statusEl.className = `status status-${next}`
     busy = next === 'busy' || next === 'starting'
-    sendBtn.disabled = next === 'starting' || next === 'error'
+    // Only 'starting' blocks sending — an error must not strand the composer.
+    sendBtn.disabled = next === 'starting'
     sendBtn.textContent = busy ? 'Stop' : 'Send'
     sendBtn.classList.toggle('stop', busy)
     inputEl.disabled = next === 'starting'
@@ -221,6 +224,7 @@
   function closeMenus() {
     modelMenu.hidden = true
     modeMenu.hidden = true
+    historyMenu.hidden = true
     menuLayer.hidden = true
   }
 
@@ -293,7 +297,6 @@
   })
 
   historyBtn.addEventListener('click', () => {
-    closeMenus()
     vscode.postMessage({ type: 'listSessions' })
   })
 
@@ -302,6 +305,31 @@
   })
 
   // ---------- host events ----------
+
+  function formatWhen(createdAt) {
+    if (typeof createdAt !== 'number') return 'unknown time'
+    const diff = Date.now() - createdAt
+    if (diff < 60_000) return 'just now'
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`
+    return `${Math.floor(diff / 86_400_000)}d ago`
+  }
+
+  function showWelcome() {
+    const container = addContainer('')
+    const hint = document.createElement('div')
+    hint.className = 'welcome'
+    hint.innerHTML = `<div class="welcome-title">DeepSeek Harness</div>
+      <div class="welcome-body">Ask me to read, write, or change your project.<br>
+      Model: <b>${escapeHtml(currentModel || '…')}</b> · Mode: <b>${escapeHtml(MODE_LABELS[currentMode])}</b></div>`
+    container.appendChild(hint)
+    welcomeEl = container
+  }
+
+  function ensureWelcome() {
+    if (welcomeEl !== null) return
+    if (messagesEl.querySelector('.msg, .tool-card') === null) showWelcome()
+  }
 
   function onState({ configured, model, workspace, mode }) {
     currentModel = model
@@ -313,6 +341,7 @@
     if (configured) {
       showChat()
       setStatus('starting')
+      ensureWelcome()
     } else {
       showSetup()
     }
@@ -321,6 +350,7 @@
   function onConfigured() {
     showChat()
     setStatus('ready')
+    ensureWelcome()
     vscode.postMessage({ type: 'listSessions' })
   }
 
@@ -336,32 +366,60 @@
 
   function onSessions({ sessions }) {
     const list = Array.isArray(sessions) ? sessions : []
-    if (list.length === 0) {
-      addMessageEl('system', 'No previous conversations yet.')
-      return
-    }
-    const container = addContainer('HISTORY')
-    for (const session of list) {
-      const row = document.createElement('div')
-      row.className = 'menu-item'
-      const label = document.createElement('div')
-      label.className = 'menu-item-label'
-      label.textContent = `${session.createdAt ? new Date(session.createdAt).toLocaleString() : 'unknown'} · ${session.sessionId.slice(0, 10)}`
-      row.appendChild(label)
-      row.addEventListener('click', () => {
-        container.remove()
-        addMessageEl('system', 'Resuming previous conversation…')
-        vscode.postMessage({ type: 'resumeSession', text: session.sessionId })
-      })
-      container.appendChild(row)
+    const items = list.length === 0
+      ? [{ value: '', label: 'No previous conversations', description: '' }]
+      : list.map((session) => ({
+        value: session.sessionId,
+        label: `${formatWhen(session.createdAt)} · ${session.sessionId.slice(0, 10)}`,
+        description: session.cwd ?? '',
+      }))
+    renderMenu(historyMenu, items, '', (sessionId) => {
+      if (sessionId === '') return
+      addMessageEl('system', 'Resuming previous conversation…')
+      vscode.postMessage({ type: 'resumeSession', text: sessionId })
+    })
+    openMenu(historyMenu)
+  }
+
+  function onTranscript({ events }) {
+    welcomeEl?.remove()
+    welcomeEl = null
+    if (!Array.isArray(events)) return
+    for (const event of events) {
+      if (event?.type === 'user/message') {
+        const container = addContainer('YOU')
+        addMessageEl('user', escapeHtml(textOf(event.data.content)), container)
+      } else if (event?.type === 'assistant/message') {
+        const container = addContainer('ASSISTANT')
+        addMessageEl('assistant', renderMarkdown(textOf(event.data.message.content)), container)
+      } else if (event?.type === 'tool/call') {
+        onToolCall({ callId: String(event.data.callId), name: event.data.name, args: event.data.arguments })
+      } else if (event?.type === 'tool/result') {
+        const block = event.data.message?.content?.[0]
+        onToolResult({
+          callId: String(block?.toolCallId ?? ''),
+          name: 'tool',
+          ok: block?.isError !== true,
+          summary: textOf(block?.content).slice(0, 400),
+        })
+      }
     }
   }
 
+  function textOf(blocks) {
+    if (!Array.isArray(blocks)) return ''
+    return blocks.filter((b) => b?.type === 'text' && typeof b.text === 'string').map((b) => b.text).join('')
+  }
+
   function onSystemMessage({ text }) {
+    welcomeEl?.remove()
+    welcomeEl = null
     addMessageEl('system', escapeHtml(text))
   }
 
   function onAssistantDelta({ text }) {
+    welcomeEl?.remove()
+    welcomeEl = null
     if (assistantBlock === null) {
       assistantContainer = addContainer('ASSISTANT')
       assistantBlock = addMessageEl('assistant streaming', '', assistantContainer)
@@ -451,6 +509,8 @@
     usageEl.textContent = '0↑ · 0↓'
     onAssistantDone()
     setStatus('idle')
+    welcomeEl = null
+    ensureWelcome()
   }
 
   window.addEventListener('message', (event) => {
@@ -460,6 +520,7 @@
       case 'configured': onConfigured(); break
       case 'models': onModels(message); break
       case 'sessions': onSessions(message); break
+      case 'transcript': onTranscript(message); break
       case 'attachments': onAttachments(message); break
       case 'usage': onUsage(message); break
       case 'status': setStatus(message.status); break
@@ -499,8 +560,12 @@
     inputEl.value = ''
     inputEl.style.height = 'auto'
     const container = addContainer('YOU')
-    addMessageEl('user', escapeHtml(text), container)
+    const bubble = addMessageEl('user', escapeHtml(text), container)
     const files = attachments
+    if (files.length > 0) {
+      const marks = files.map((file) => `📎 ${escapeHtml(file.name)}`).join('<br>')
+      bubble.innerHTML += `<br><span class="attached-marks">${marks}</span>`
+    }
     attachments = []
     renderAttachments()
     vscode.postMessage({ type: 'prompt', text, files })

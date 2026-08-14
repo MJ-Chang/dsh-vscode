@@ -115,6 +115,12 @@ body { display: flex; flex-direction: column; }
 .msg.user { white-space: pre-wrap; word-wrap: break-word; }
 .msg.assistant { word-wrap: break-word; }
 
+.msg.user .attached-marks { color: var(--vscode-descriptionForeground); font-size: 11px; }
+
+.welcome { padding: 28px 8px; text-align: center; color: var(--vscode-descriptionForeground); }
+.welcome-title { font-size: 15px; font-weight: 650; margin-bottom: 8px; color: var(--vscode-foreground); }
+.welcome-body { font-size: 12.5px; line-height: 1.7; }
+
 .msg.assistant.streaming::after {
   content: "▍";
   animation: blink 1s step-start infinite;

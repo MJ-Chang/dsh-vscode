@@ -168,13 +168,30 @@ export function apply(ctx) {
   async function listSessions() {
     const headers = await ctx.sessionPersistence.list()
     return {
-      sessions: headers.map((header) => ({
-        sessionId: String(header.id),
-        cwd: header.cwd,
-        createdAt: header.createdAt,
-        parentSession: header.parentSession === undefined ? undefined : String(header.parentSession),
-      })),
+      // Only this workspace's history: the persistence root is shared by all
+      // workspaces, so filter on the session cwd.
+      sessions: headers
+        .filter((header) => header.cwd === cwd)
+        .map((header) => ({
+          sessionId: String(header.id),
+          cwd: header.cwd,
+          createdAt: header.createdAt,
+          parentSession: header.parentSession === undefined ? undefined : String(header.parentSession),
+        })),
     }
+  }
+
+  // Model-visible event types a resumed conversation replays in the UI.
+  const TRANSCRIPT_TYPES = new Set(['user/message', 'assistant/message', 'tool/call', 'tool/result'])
+
+  async function transcript(params) {
+    const sessionId = String(params.sessionId)
+    if (sessionId === '') throw new Error('session/transcript requires a non-empty sessionId')
+    const handle = await getOrCreateSession(sessionId)
+    const events = handle.agent.session.events
+      .filter((event) => TRANSCRIPT_TYPES.has(event.type))
+      .map((event) => event)
+    return { events }
   }
 
   async function shutdown() {
@@ -223,6 +240,7 @@ export function apply(ctx) {
       case 'session/cancel': result = await cancel(params ?? {}); break
       case 'session/setMode': result = await setMode(params ?? {}); break
       case 'session/list': result = await listSessions(); break
+      case 'session/transcript': result = await transcript(params ?? {}); break
       case 'shutdown': result = await shutdown(); break
       default: throw new Error(`unknown DeepSeek Harness SDK runtime method: ${method}`)
     }

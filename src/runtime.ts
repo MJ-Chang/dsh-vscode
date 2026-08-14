@@ -104,6 +104,7 @@ export class HarnessRuntime {
   private client: HarnessClient | undefined
   private subscription: NotificationSubscription | undefined
   private sessionId: string | undefined
+  private pumpGeneration = 0
   private started = false
   private closed = false
   private apiKey: string | undefined
@@ -281,6 +282,7 @@ export class HarnessRuntime {
     await client.request('session/new', { sessionId, ...(model === undefined ? {} : { model }) }, 10_000)
     this.subscription?.close()
     this.subscription = undefined
+    this.pumpGeneration++
     this.sessionId = sessionId
     this.subscription = client.subscribeSessionTree(sessionId)
     void this.pumpNotifications()
@@ -288,19 +290,26 @@ export class HarnessRuntime {
     this.emit({ type: 'status', status: 'idle' })
   }
 
-  /** Resume a persisted conversation by session id. */
-  async resumeSession(sessionId: string): Promise<void> {
+  /** Resume a persisted conversation by session id; returns its replayable transcript. */
+  async resumeSession(sessionId: string): Promise<SessionEvent[]> {
     await this.start()
     const client = this.client
-    if (client === undefined) return
+    if (client === undefined) return []
     await client.request('session/new', { sessionId }, 10_000)
     this.subscription?.close()
     this.subscription = undefined
+    this.pumpGeneration++
     this.sessionId = sessionId
     this.subscription = client.subscribeSessionTree(sessionId)
     void this.pumpNotifications()
     this.emit({ type: 'sessionId', sessionId })
     this.emit({ type: 'status', status: 'idle' })
+    try {
+      const result = await client.request('session/transcript', { sessionId }, 10_000) as { events?: SessionEvent[] }
+      return Array.isArray(result.events) ? result.events : []
+    } catch {
+      return []
+    }
   }
 
   /** Request protocol shutdown and reap the child. Idempotent. */
@@ -327,13 +336,16 @@ export class HarnessRuntime {
 
   private async pumpNotifications(): Promise<void> {
     const subscription = this.subscription
+    const generation = this.pumpGeneration
     if (subscription === undefined) return
     try {
       for await (const notification of subscription) {
         this.handleNotification(notification)
       }
     } catch (error) {
-      if (!this.closed) {
+      // Ignore teardown of a superseded subscription (a session switch closed
+      // it) and extension shutdown; surface only live runtime failures.
+      if (!this.closed && generation === this.pumpGeneration) {
         this.emit({ type: 'status', status: 'error', detail: errorMessage(error) })
       }
     }
