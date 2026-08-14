@@ -145,7 +145,9 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
             runtime.setApiKey(stored ?? undefined)
             await runtime.start()
             const models = await runtime.listModels()
+            const presets = await runtime.listPresets()
             await view.webview.postMessage({ type: 'models', models })
+            await view.webview.postMessage({ type: 'presets', presets })
           }
           break
         }
@@ -164,10 +166,29 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           runtime.setApiKey(key)
           await runtime.start()
           const models = await runtime.listModels()
+          const presets = await runtime.listPresets()
           await view.webview.postMessage({ type: 'configured' })
           await view.webview.postMessage({ type: 'models', models })
+          await view.webview.postMessage({ type: 'presets', presets })
           break
         }
+        case 'setPreset': {
+          const runtime = this.ensureRuntime()
+          if (runtime === undefined) break
+          if (typeof message.text === 'string' && message.text !== '') {
+            await runtime.newSession(undefined, message.text)
+            await view.webview.postMessage({ type: 'clear' })
+          }
+          break
+        }
+        case 'openSettings':
+          void vscode.commands.executeCommand('workbench.action.openSettings', 'dshVscode')
+          break
+        case 'runCommand':
+          if (typeof message.text === 'string' && message.text !== '') {
+            void vscode.commands.executeCommand(message.text)
+          }
+          break
         case 'copyPath':
           if (typeof message.text === 'string' && message.text !== '') {
             await vscode.env.clipboard.writeText(message.text)

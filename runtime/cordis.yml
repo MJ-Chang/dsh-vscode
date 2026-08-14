@@ -41,14 +41,26 @@
   config:
     policy: never
 
-# Managed child-process groups for the bash executor.
+# Managed child-process groups for the shell executor. The base bundle splits
+# by platform: bash (sandboxed) on POSIX, PowerShell (sandboxed) on Windows —
+# dsh-bash-sandbox cannot create a service on Windows (E_ACCESSDENIED) and
+# spawning bash there flashes console windows.
 - id: subprocess
   name: '@deepseek-ai/dsh-subprocess-local'
 
 - id: bash
   name: '@deepseek-ai/dsh-bash-sandbox'
+  disabled: !!js process.platform === 'win32'
   config:
     timeoutMs: 60000
+
+- id: pwsh
+  name: '@deepseek-ai/dsh-pwsh-sandbox'
+  disabled: !!js process.platform !== 'win32'
+
+# Shell environment resolution shared by the shell tools.
+- id: shell-env
+  name: '@deepseek-ai/dsh-shell-env'
 
 # The agent spine: session log, system prompt, tool registry, agent loop,
 # skills, todo/jobs tools, agent-instructions (AGENTS.md/CLAUDE.md loader).
@@ -56,6 +68,7 @@
   name: '@deepseek-ai/dsh-agent-spine-demo'
   config:
     includeHarnessIdentity: false
+    toolBash: false
     persona: |
       You are a coding assistant powered by the {{model}} model, running
       inside the user's VS Code. Your working directory is {{cwd}}.
@@ -68,6 +81,15 @@
       maxBytes: 65536
     skills:
       enabled: false
+
+# Model-facing shell tools, split by platform like the executors above.
+- id: tool-bash
+  name: '@deepseek-ai/dsh-tool-bash'
+  disabled: !!js process.platform === 'win32'
+
+- id: tool-pwsh
+  name: '@deepseek-ai/dsh-tool-pwsh'
+  disabled: !!js process.platform !== 'win32'
 
 # The filesystem stack rides the same sandbox policy as bash:
 # read/write/edit are confined to the workspace under workspace-write mode.
@@ -107,3 +129,15 @@
   config:
     root: !!js process.env.DSH_SESSION_ROOT ?? './.sessions'
     compression: none
+
+# Agent presets: per-session compositions (tools, prompt, capabilities).
+# Presets ship in the extension's presets/ directory; users may add their own
+# directories there. The bridge exposes presets/list and session/new {preset}.
+- id: agent-presets
+  name: '@deepseek-ai/dsh-agent-presets'
+  config:
+    default: default
+    includeUserRoot: false
+    roots:
+      - path: !!js (process.env.DSH_VSCODE_EXTENSION_DIR ?? process.cwd()) + '/presets'
+        trust: system

@@ -31,8 +31,14 @@
     <header id="header">
       <div class="header-main">
         <span id="workspace" class="workspace" title="Workspace path (click to copy)"></span>
-        <button id="history-btn" class="pill" title="Conversation history">history ▾</button>
         <span id="status" class="status status-idle">idle</span>
+      </div>
+      <div class="header-sub">
+        <button id="preset-btn" class="pill" title="Agent preset — which tools & capabilities this session runs">preset <span id="preset-name" class="pill-value">default</span></button>
+        <button id="history-btn" class="pill" title="Conversation history">history ▾</button>
+        <span class="spacer"></span>
+        <button id="new-session-btn" class="icon-btn" title="New conversation">＋</button>
+        <button id="settings-btn" class="icon-btn" title="Settings">⚙</button>
       </div>
     </header>
 
@@ -43,6 +49,8 @@
       <div id="model-menu" class="menu" hidden></div>
       <div id="mode-menu" class="menu" hidden></div>
       <div id="history-menu" class="menu" hidden></div>
+      <div id="preset-menu" class="menu" hidden></div>
+      <div id="settings-menu" class="menu" hidden></div>
     </div>
 
     <footer id="composer">

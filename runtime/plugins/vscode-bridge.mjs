@@ -65,10 +65,13 @@ export function apply(ctx) {
 
   // ---- session lifecycle ----
 
-  async function createAgent(sessionId, preferredModel) {
+  async function createAgent(sessionId, preferredModel, preferredPreset) {
     const handle = await ctx.agents.create({
       sessionId: SessionId(sessionId),
-      meta: { cwd },
+      meta: {
+        cwd,
+        ...(preferredPreset === undefined ? {} : { agentPreset: preferredPreset }),
+      },
       agentOptions: {
         provider,
         model: preferredModel ?? model,
@@ -79,12 +82,12 @@ export function apply(ctx) {
 
   /** Get the live agent for a session, creating it (or resuming a persisted
    *  log under the same id) on first use. */
-  async function getOrCreateSession(sessionId, preferredModel) {
+  async function getOrCreateSession(sessionId, preferredModel, preferredPreset) {
     const existing = agents.get(sessionId)
     if (existing !== undefined) return existing
     const queued = pending.get(sessionId)
     if (queued !== undefined) return queued
-    const creation = createAgent(sessionId, preferredModel)
+    const creation = createAgent(sessionId, preferredModel, preferredPreset)
     pending.set(sessionId, creation)
     try {
       const handle = await creation
@@ -118,14 +121,32 @@ export function apply(ctx) {
     return { models: catalog }
   }
 
+  async function listPresets() {
+    const presets = ctx.get('agentPresets')
+    if (presets === undefined) return { presets: [] }
+    const list = await presets.list()
+    return {
+      presets: list.map((preset) => ({
+        id: preset.id,
+        name: preset.name ?? preset.id,
+        description: preset.description ?? '',
+        trust: preset.trust,
+        broken: preset.broken,
+      })),
+    }
+  }
+
   async function createSession(params) {
     const sessionId = String(params.sessionId)
     if (sessionId === '') throw new Error('session/new requires a non-empty sessionId')
     const preferredModel = typeof params.model === 'string' && params.model !== ''
       ? params.model
       : undefined
-    await getOrCreateSession(sessionId, preferredModel)
-    return { sessionId }
+    const preset = typeof params.preset === 'string' && params.preset !== ''
+      ? params.preset
+      : undefined
+    await getOrCreateSession(sessionId, preferredModel, preset)
+    return { sessionId, ...(preset === undefined ? {} : { preset }) }
   }
 
   async function prompt(params) {
@@ -235,6 +256,7 @@ export function apply(ctx) {
     switch (method) {
       case 'initialize': result = await initialize(params ?? {}); break
       case 'models/list': result = await listModels(); break
+      case 'presets/list': result = await listPresets(); break
       case 'session/new': result = await createSession(params ?? {}); break
       case 'session/prompt': result = await prompt(params ?? {}); break
       case 'session/cancel': result = await cancel(params ?? {}); break

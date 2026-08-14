@@ -36,6 +36,7 @@ const client = new HarnessClient({
     DSH_SESSION_ROOT: sessions,
     DSH_VSCODE_WORKSPACE: workspace,
     DSH_VSCODE_WORKSPACE_WRITE: 'true',
+    DSH_VSCODE_EXTENSION_DIR: root,
   },
   shutdownTimeoutMs: 2000,
 })
@@ -69,8 +70,16 @@ try {
     process.exitCode = 1
   }
 
-  const created = await client.request('session/new', { sessionId, model: 'deepseek-v4-flash' }, 10000)
-  console.log(`[3/6] session/new OK — ${JSON.stringify(created)}`)
+  const presets = await client.request('presets/list', {}, 5000)
+  const presetList = presets.presets ?? []
+  console.log(`[3/6] presets/list OK — ${presetList.map((p) => `${p.id}${p.broken ? ` (broken: ${p.broken})` : ''}`).join(', ') || '(none)'}`)
+  if (presetList.length === 0) {
+    console.error('[FAIL] presets/list returned nothing (agent-presets not mounted?)')
+    process.exitCode = 1
+  }
+
+  const created = await client.request('session/new', { sessionId, model: 'deepseek-v4-flash', preset: 'minimal' }, 10000)
+  console.log(`[3/6] session/new OK (preset=minimal) — ${JSON.stringify(created)}`)
 
   const messageId = await client.prompt(sessionId, [{ type: 'text', text: 'Say hi.' }])
   console.log(`[4/6] prompt OK — messageId ${messageId}`)

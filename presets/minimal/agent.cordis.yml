@@ -1,0 +1,12 @@
+# The `minimal` agent preset: a fixed persona and only the filesystem tools.
+# The shell and todo tools of the global composition are NOT in this agent's
+# view — a scoped preset shadows the global layer for joined sessions.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: You are a helpful software engineer assistant. Read and edit files; you have no shell.
+    complete: true
+    includeRuntimeContext: false
+
+- id: tool-fs
+  name: '@deepseek-ai/dsh-tool-fs'

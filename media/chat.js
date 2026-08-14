@@ -27,11 +27,17 @@
   const usageEl = document.getElementById('usage')
   const historyBtn = document.getElementById('history-btn')
   const attachBtn = document.getElementById('attach-btn')
+  const newSessionBtn = document.getElementById('new-session-btn')
+  const settingsBtn = document.getElementById('settings-btn')
+  const presetBtn = document.getElementById('preset-btn')
+  const presetName = document.getElementById('preset-name')
   const attachmentsEl = document.getElementById('attachments')
   const menuLayer = document.getElementById('menu-layer')
   const modelMenu = document.getElementById('model-menu')
   const modeMenu = document.getElementById('mode-menu')
   const historyMenu = document.getElementById('history-menu')
+  const presetMenu = document.getElementById('preset-menu')
+  const settingsMenu = document.getElementById('settings-menu')
 
   const MODE_LABELS = {
     'read-only': 'Read-only',
@@ -46,7 +52,9 @@
   let assistantText = ''
   let currentModel = ''
   let currentMode = 'workspace-write'
+  let currentPreset = 'default'
   let modelCatalog = []
+  let presetCatalog = []
   let workspacePath = ''
   let attachments = []
   let usageInput = 0
@@ -226,6 +234,8 @@
     modelMenu.hidden = true
     modeMenu.hidden = true
     historyMenu.hidden = true
+    presetMenu.hidden = true
+    settingsMenu.hidden = true
     menuLayer.hidden = true
   }
 
@@ -307,11 +317,52 @@
     vscode.postMessage({ type: 'listSessions' })
   })
 
+  newSessionBtn.addEventListener('click', () => {
+    closeMenus()
+    vscode.postMessage({ type: 'newSession' })
+  })
+
+  presetBtn.addEventListener('click', () => {
+    const items = presetCatalog.length > 0
+      ? presetCatalog.map((p) => ({
+        value: p.id,
+        label: p.name ?? p.id,
+        description: p.broken ?? p.description ?? '',
+      }))
+      : [{ value: currentPreset, label: currentPreset, description: '' }]
+    renderMenu(presetMenu, items, currentPreset, (preset) => {
+      if (preset !== currentPreset) {
+        currentPreset = preset
+        presetName.textContent = preset
+        addMessageEl('system', `New conversation · preset: ${preset}`)
+        vscode.postMessage({ type: 'setPreset', text: preset })
+      }
+    })
+    openMenu(presetMenu)
+  })
+
+  settingsBtn.addEventListener('click', () => {
+    renderMenu(settingsMenu, [
+      { value: 'dshVscode.setApiKey', label: 'Set API Key', description: 'Change the DeepSeek API key' },
+      { value: 'dshVscode.clearApiKey', label: 'Clear API Key', description: 'Remove the stored key' },
+      { value: '__openSettings', label: 'Open Extension Settings', description: 'Model, permission, API key env (VS Code settings)' },
+      { value: 'dshVscode.installPlugin', label: 'Install Plugin…', description: 'Add a harness plugin (npm / git / path)' },
+      { value: 'dshVscode.listPlugins', label: 'Manage Plugins', description: 'List or remove installed plugins' },
+    ], '', (value) => {
+      if (value === '__openSettings') {
+        vscode.postMessage({ type: 'openSettings' })
+      } else {
+        vscode.postMessage({ type: 'runCommand', text: value })
+      }
+    })
+    openMenu(settingsMenu)
+  })
+
   document.addEventListener('click', (event) => {
     // Close menus only when the click lands outside every menu AND outside
     // the buttons that open them (otherwise a menu opens and instantly closes).
     const inside = event.target.closest(
-      '.menu-layer, #model-btn, #mode-btn, #history-btn',
+      '.menu-layer, #model-btn, #mode-btn, #history-btn, #preset-btn, #settings-btn',
     )
     if (!inside) closeMenus()
   })
@@ -343,12 +394,14 @@
     if (messagesEl.querySelector('.msg, .tool-card') === null) showWelcome()
   }
 
-  function onState({ configured, model, workspace, workspacePath: wsPath, mode, noWorkspace }) {
+  function onState({ configured, model, workspace, workspacePath: wsPath, mode, noWorkspace, preset }) {
     currentModel = model
     currentMode = mode ?? 'workspace-write'
+    if (typeof preset === 'string' && preset !== '') currentPreset = preset
     modelName.textContent = model
     modeName.textContent = MODE_LABELS[currentMode]
     modePill.dataset.mode = currentMode
+    presetName.textContent = currentPreset
     workspacePath = wsPath ?? ''
     workspaceEl.textContent = workspace || 'no workspace'
     workspaceEl.title = workspacePath !== '' ? `Workspace: ${workspacePath} (click to copy)` : ''
@@ -388,19 +441,34 @@
 
   function onSessions({ sessions }) {
     const list = Array.isArray(sessions) ? sessions : []
-    const items = list.length === 0
-      ? [{ value: '', label: 'No previous conversations', description: '' }]
-      : list.map((session) => ({
+    const items = [
+      { value: '__new', label: '＋ New conversation', description: '' },
+      ...list.map((session) => ({
         value: session.sessionId,
         label: `${formatWhen(session.createdAt)} · ${session.sessionId.slice(0, 10)}`,
         description: session.cwd ?? '',
-      }))
+      })),
+    ]
+    if (list.length === 0) items.push({ value: '', label: 'No previous conversations', description: '' })
     renderMenu(historyMenu, items, '', (sessionId) => {
-      if (sessionId === '') return
-      addMessageEl('system', 'Resuming previous conversation…')
-      vscode.postMessage({ type: 'resumeSession', text: sessionId })
+      if (sessionId === '__new') {
+        vscode.postMessage({ type: 'newSession' })
+      } else if (sessionId !== '') {
+        addMessageEl('system', 'Resuming previous conversation…')
+        vscode.postMessage({ type: 'resumeSession', text: sessionId })
+      }
     })
     openMenu(historyMenu)
+  }
+
+  function onPresets({ presets }) {
+    presetCatalog = Array.isArray(presets) ? presets : []
+    if (presetCatalog.length > 0 && presetCatalog.some((p) => p.id === currentPreset)) {
+      // keep current selection
+    } else if (presetCatalog.length > 0) {
+      currentPreset = presetCatalog[0].id
+      presetName.textContent = currentPreset
+    }
   }
 
   function onTranscript({ events }) {
@@ -541,6 +609,7 @@
       case 'state': onState(message); break
       case 'configured': onConfigured(); break
       case 'models': onModels(message); break
+      case 'presets': onPresets(message); break
       case 'sessions': onSessions(message); break
       case 'transcript': onTranscript(message); break
       case 'attachments': onAttachments(message); break

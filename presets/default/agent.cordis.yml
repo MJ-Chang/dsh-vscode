@@ -1,0 +1,3 @@
+# The `default` agent preset: no agent-plane rows, so the session runs the
+# runtime's global composition (shell, fs, todo, workspace context, persona).
+[]

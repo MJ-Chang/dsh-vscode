@@ -77,10 +77,14 @@ body { display: flex; flex-direction: column; }
 
 #header {
   flex: none;
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, rgba(128,128,128,0.3));
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
-.header-main { display: flex; align-items: center; gap: 10px; }
+.header-main { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.header-sub { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .workspace {
   flex: 1;
   font-size: 12.5px; font-weight: 600;
@@ -220,7 +224,7 @@ body { display: flex; flex-direction: column; }
 #input:focus { outline: 1px solid var(--vscode-focusBorder); }
 #input:disabled { opacity: 0.5; }
 
-.composer-bar { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+.composer-bar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; row-gap: 6px; }
 
 .select-btn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -254,6 +258,14 @@ body { display: flex; flex-direction: column; }
   line-height: 1;
 }
 .icon-btn:hover { background: var(--vscode-button-secondaryHoverBackground); }
+
+/* narrow sidebar: keep every control usable without cramming */
+@media (max-width: 380px) {
+  .select-btn { max-width: 40%; }
+  .mode-pill { max-width: 32%; }
+  .usage { font-size: calc(var(--mono-size) - 3px); }
+  .pill, .select-btn { padding-left: 7px; padding-right: 7px; }
+}
 
 .pill {
   display: inline-flex; align-items: center; gap: 6px;

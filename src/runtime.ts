@@ -54,6 +54,15 @@ export interface SessionInfo {
   parentSession?: string
 }
 
+/** One agent preset the runtime roster supplies. */
+export interface PresetInfo {
+  id: string
+  name: string
+  description?: string
+  trust?: string
+  broken?: string
+}
+
 export interface RuntimeOptions {
   /** Extension install root; runtime/cordis.yml lives here. */
   extensionPath: string
@@ -179,6 +188,7 @@ export class HarnessRuntime {
       DSH_VSCODE_WORKSPACE: this.options.workspacePath,
       DSH_VSCODE_WORKSPACE_WRITE: String(this.options.workspaceWriteOnly),
       DSH_VSCODE_API_KEY_ENV: this.options.apiKeyEnv,
+      DSH_VSCODE_EXTENSION_DIR: this.options.extensionPath,
     }
     // A stored key wins over the inherited environment (never set the var to
     // undefined — child_process would serialize that as the literal "undefined").
@@ -277,13 +287,30 @@ export class HarnessRuntime {
     }
   }
 
-  /** Start a new conversation, optionally with a specific model. */
-  async newSession(model?: string): Promise<void> {
+  /** List agent presets the runtime roster supplies. */
+  async listPresets(): Promise<PresetInfo[]> {
+    await this.start()
+    const client = this.client
+    if (client === undefined) return []
+    try {
+      const result = await client.request('presets/list', {}, 5_000) as { presets?: PresetInfo[] }
+      return Array.isArray(result.presets) ? result.presets : []
+    } catch {
+      return []
+    }
+  }
+
+  /** Start a new conversation, optionally with a specific model or preset. */
+  async newSession(model?: string, preset?: string): Promise<void> {
     await this.start()
     const client = this.client
     if (client === undefined) return
     const sessionId = `vscode-${randomUUID()}`
-    await client.request('session/new', { sessionId, ...(model === undefined ? {} : { model }) }, 10_000)
+    await client.request('session/new', {
+      sessionId,
+      ...(model === undefined ? {} : { model }),
+      ...(preset === undefined ? {} : { preset }),
+    }, 10_000)
     this.subscription?.close()
     this.subscription = undefined
     this.pumpGeneration++

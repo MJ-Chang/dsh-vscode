@@ -75,6 +75,35 @@ await post({
 })
 check('model pill shows a model', document.getElementById('model-name').textContent !== '')
 
+// --- presets ---
+await post({
+  type: 'presets',
+  presets: [
+    { id: 'default', name: 'Default', description: 'Full coding agent' },
+    { id: 'minimal', name: 'Minimal', description: 'Files only' },
+  ],
+})
+check('preset pill shows a preset', document.getElementById('preset-name').textContent === 'default')
+document.getElementById('preset-btn').click()
+await tick()
+check('preset menu stays open after clicking its button', !document.getElementById('preset-menu').hidden)
+const minimalItem = [...document.querySelectorAll('#preset-menu .menu-item')].find((el) => el.textContent.includes('Minimal'))
+minimalItem?.click()
+await tick()
+check('selecting a preset posts setPreset', posted.some((m) => m.type === 'setPreset' && m.text === 'minimal'))
+check('preset pill updates', document.getElementById('preset-name').textContent === 'minimal')
+
+// --- settings menu ---
+document.getElementById('settings-btn').click()
+await tick()
+check('settings menu opens', !document.getElementById('settings-menu').hidden)
+check('settings menu has key + plugin entries', [...document.querySelectorAll('#settings-menu .menu-item-label')].some((el) => el.textContent.includes('Install Plugin')))
+
+// --- new conversation button ---
+document.getElementById('new-session-btn').click()
+await tick()
+check('new-session button posts newSession', posted.some((m) => m.type === 'newSession'))
+
 // --- model menu opens and stays open (regression: instant-close bug) ---
 document.getElementById('model-btn').click()
 await tick()
@@ -103,7 +132,8 @@ check('workspace click posts copyPath', posted.some((m) => m.type === 'copyPath'
 // --- sessions (history menu) ---
 await post({ type: 'sessions', sessions: [{ sessionId: 'abc123', createdAt: Date.now() }] })
 check('history menu opened', !document.getElementById('history-menu').hidden)
-check('history menu has an item', document.querySelectorAll('#history-menu .menu-item').length > 0)
+check('history menu has items incl. new conversation', document.querySelectorAll('#history-menu .menu-item').length >= 2)
+check('history menu offers New conversation', [...document.querySelectorAll('#history-menu .menu-item')].some((el) => el.textContent.includes('New conversation')))
 
 // --- transcript (resumed conversation) ---
 await post({
