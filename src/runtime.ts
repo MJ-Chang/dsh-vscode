@@ -15,6 +15,7 @@ import { createRequire } from 'node:module'
 import * as path from 'node:path'
 import type { ContentBlock, NotificationSubscription } from '@deepseek-ai/dsh-sdk-client'
 import type { SessionEvent } from '@deepseek-ai/dsh-session'
+import { generateEffectiveConfig } from './plugins'
 
 type SdkModule = typeof import('@deepseek-ai/dsh-sdk-client')
 type HarnessClient = InstanceType<SdkModule['HarnessClient']>
@@ -164,7 +165,10 @@ export class HarnessRuntime {
     if (this.started) return
     const sdk = await loadSdk()
     const bin = resolveRuntimeBin(this.options.extensionPath)
-    const configPath = path.join(this.options.extensionPath, 'runtime', 'cordis.yml')
+    const configPath = await generateEffectiveConfig({
+      extensionPath: this.options.extensionPath,
+      storagePath: this.options.storagePath,
+    })
     const sessionsRoot = path.join(this.options.storagePath, 'sessions')
     await mkdir(sessionsRoot, { recursive: true })
 
@@ -323,6 +327,16 @@ export class HarnessRuntime {
       await client.close().catch(() => undefined)
     }
     this.emit({ type: 'status', status: 'stopped' })
+  }
+
+  /** Reboot the runtime child (used after plugin install/remove). */
+  async restart(): Promise<void> {
+    await this.dispose()
+    this.closed = false
+    this.started = false
+    this.emit({ type: 'status', status: 'starting' })
+    await this.start()
+    this.emit({ type: 'status', status: 'idle' })
   }
 
   private openSession(): void {

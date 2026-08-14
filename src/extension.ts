@@ -7,12 +7,21 @@
 
 import * as vscode from 'vscode'
 import { CHAT_VIEW_ID, CHAT_VIEW_ID_SECONDARY, ChatViewProvider } from './chatView'
+import { installPlugin, listPlugins, removePlugin, type PluginPaths } from './plugins'
 import { HarnessRuntime } from './runtime'
 
 const API_KEY_SECRET = 'dshVscode.apiKey'
 
 let runtime: HarnessRuntime | undefined
 let chatProvider: ChatViewProvider | undefined
+
+/** Plugin-manager paths derived from the extension context. */
+function pluginPaths(context: vscode.ExtensionContext): PluginPaths {
+  return {
+    extensionPath: context.extensionPath,
+    storagePath: context.globalStorageUri.fsPath,
+  }
+}
 
 /** Create the workspace-bound runtime; undefined when no folder is open. */
 function createRuntime(context: vscode.ExtensionContext): HarnessRuntime | undefined {
@@ -89,6 +98,76 @@ export function activate(context: vscode.ExtensionContext): void {
       await context.secrets.delete(API_KEY_SECRET)
       runtime?.setApiKey(undefined)
       void vscode.window.showInformationMessage('DeepSeek Harness: API key removed.')
+    }),
+  )
+
+  // ---- harness plugin management (the embedded runtime is plugin-composed) ----
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dshVscode.installPlugin', async () => {
+      const spec = await vscode.window.showInputBox({
+        title: 'DeepSeek Harness: Install Plugin',
+        prompt: 'npm package name, git spec (github:user/repo), or a local path. Example: dsh-hello-plugin',
+        ignoreFocusOut: true,
+        validateInput: (value) => value.trim() === '' ? 'Enter a package spec.' : undefined,
+      })
+      if (spec === undefined || spec.trim() === '') return
+      try {
+        await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: `Installing ${spec}…` },
+          async () => { await installPlugin(spec.trim(), pluginPaths(context)) },
+        )
+        await chatProvider?.restartRuntime()
+        const installed = await listPlugins(pluginPaths(context))
+        void vscode.window.showInformationMessage(
+          `DeepSeek Harness: plugin installed. Active plugins: ${installed.join(', ') || '(none)'}`,
+        )
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `DeepSeek Harness: install failed — ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }),
+  )
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dshVscode.removePlugin', async () => {
+      const installed = await listPlugins(pluginPaths(context))
+      if (installed.length === 0) {
+        void vscode.window.showInformationMessage('DeepSeek Harness: no plugins installed.')
+        return
+      }
+      const picked = await vscode.window.showQuickPick(installed, {
+        title: 'DeepSeek Harness: Remove Plugin',
+        placeHolder: 'Select a plugin to remove',
+      })
+      if (picked === undefined) return
+      try {
+        await removePlugin(picked, pluginPaths(context))
+        await chatProvider?.restartRuntime()
+        void vscode.window.showInformationMessage(`DeepSeek Harness: ${picked} removed.`)
+      } catch (error) {
+        void vscode.window.showErrorMessage(
+          `DeepSeek Harness: remove failed — ${error instanceof Error ? error.message : String(error)}`,
+        )
+      }
+    }),
+  )
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('dshVscode.listPlugins', async () => {
+      const installed = await listPlugins(pluginPaths(context))
+      if (installed.length === 0) {
+        void vscode.window.showInformationMessage(
+          'DeepSeek Harness: no user plugins installed. Use "DeepSeek Harness: Install Plugin" to add one.',
+        )
+        return
+      }
+      const picked = await vscode.window.showQuickPick(installed, {
+        title: 'DeepSeek Harness: Installed Plugins',
+        placeHolder: 'Installed harness plugins',
+      })
+      void picked
     }),
   )
 

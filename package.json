@@ -18,6 +18,9 @@
     "onCommand:dshVscode.startRuntime",
     "onCommand:dshVscode.setApiKey",
     "onCommand:dshVscode.clearApiKey",
+    "onCommand:dshVscode.installPlugin",
+    "onCommand:dshVscode.removePlugin",
+    "onCommand:dshVscode.listPlugins",
     "onView:dsh-vscode-chat-view",
     "onView:dsh-vscode-chat-view-secondary"
   ],
@@ -82,6 +85,21 @@
         "command": "dshVscode.clearApiKey",
         "title": "Clear API Key",
         "category": "DeepSeek Harness"
+      },
+      {
+        "command": "dshVscode.installPlugin",
+        "title": "Install Plugin",
+        "category": "DeepSeek Harness"
+      },
+      {
+        "command": "dshVscode.removePlugin",
+        "title": "Remove Plugin",
+        "category": "DeepSeek Harness"
+      },
+      {
+        "command": "dshVscode.listPlugins",
+        "title": "List Plugins",
+        "category": "DeepSeek Harness"
       }
     ],
     "configuration": {
@@ -113,7 +131,8 @@
     "test:runtime": "node scripts/smoke-runtime.mjs",
     "test:webview": "node scripts/test-webview.mjs",
     "test:activate": "node scripts/test-activate.mjs",
-    "test": "npm run test:webview && npm run test:activate"
+    "test:plugins": "node scripts/test-plugins.mjs",
+    "test": "npm run test:webview && npm run test:activate && npm run test:plugins"
   },
   "dependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -163,7 +182,8 @@
     "@deepseek-ai/dsh-tool-skill": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tool-todo": "^0.1.0-rc.6",
     "@deepseek-ai/dsh-tools": "^0.1.0-rc.6",
-    "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.6"
+    "@deepseek-ai/dsh-user-approval": "^0.1.0-rc.6",
+    "yaml": "^2.9.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

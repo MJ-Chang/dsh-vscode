@@ -51,6 +51,18 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
     await this.handleMessage({ type: 'ready' })
   }
 
+  /** Reboot the runtime (used after plugin install/remove) and refresh the view. */
+  async restartRuntime(): Promise<void> {
+    const runtime = this.ensureRuntime()
+    if (runtime === undefined) return
+    await runtime.restart()
+    const view = this.view
+    if (view !== undefined) {
+      await view.webview.postMessage({ type: 'clear' })
+      await this.handleMessage({ type: 'ready' })
+    }
+  }
+
   private ensureRuntime(): HarnessRuntime | undefined {
     if (this.runtime === undefined) {
       this.runtime = this.runtimeFactory()
