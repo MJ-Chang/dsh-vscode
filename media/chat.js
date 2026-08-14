@@ -23,7 +23,11 @@
   const modelName = document.getElementById('model-name')
   const modeBtn = document.getElementById('mode-btn')
   const modeName = document.getElementById('mode-name')
+  const modePill = document.getElementById('mode-btn')
+  const usageEl = document.getElementById('usage')
   const historyBtn = document.getElementById('history-btn')
+  const attachBtn = document.getElementById('attach-btn')
+  const attachmentsEl = document.getElementById('attachments')
   const menuLayer = document.getElementById('menu-layer')
   const modelMenu = document.getElementById('model-menu')
   const modeMenu = document.getElementById('mode-menu')
@@ -42,6 +46,9 @@
   let currentModel = ''
   let currentMode = 'workspace-write'
   let modelCatalog = []
+  let attachments = []
+  let usageInput = 0
+  let usageOutput = 0
   const toolCards = new Map()
 
   // ---------- utils ----------
@@ -161,6 +168,54 @@
     inputEl.disabled = next === 'starting'
   }
 
+  // ---------- attachments ----------
+
+  function renderAttachments() {
+    attachmentsEl.replaceChildren()
+    if (attachments.length === 0) {
+      attachmentsEl.hidden = true
+      return
+    }
+    attachmentsEl.hidden = false
+    for (let i = 0; i < attachments.length; i++) {
+      const file = attachments[i]
+      const chip = document.createElement('span')
+      chip.className = 'attachment-chip'
+      const name = document.createElement('span')
+      name.className = 'name'
+      name.textContent = file.name
+      name.title = file.name
+      const size = document.createElement('span')
+      size.className = 'size'
+      size.textContent = `${(file.content.length / 1024).toFixed(1)}KB`
+      const remove = document.createElement('button')
+      remove.className = 'remove'
+      remove.textContent = '×'
+      remove.title = 'Remove'
+      remove.addEventListener('click', () => {
+        attachments.splice(i, 1)
+        renderAttachments()
+      })
+      chip.append(name, size, remove)
+      attachmentsEl.appendChild(chip)
+    }
+  }
+
+  function onAttachments({ files }) {
+    if (!Array.isArray(files)) return
+    attachments = files
+    renderAttachments()
+  }
+
+  // ---------- token usage ----------
+
+  function onUsage({ input, output }) {
+    usageInput += input
+    usageOutput += output
+    usageEl.textContent = `${usageInput.toLocaleString()}↑ · ${usageOutput.toLocaleString()}↓`
+    usageEl.title = `Tokens used this conversation — in: ${usageInput.toLocaleString()}, out: ${usageOutput.toLocaleString()}`
+  }
+
   // ---------- menus ----------
 
   function closeMenus() {
@@ -225,10 +280,16 @@
       if (mode !== currentMode) {
         currentMode = mode
         modeName.textContent = MODE_LABELS[mode]
+        modePill.dataset.mode = mode
         vscode.postMessage({ type: 'setMode', text: mode })
       }
     })
     openMenu(modeMenu)
+  })
+
+  attachBtn.addEventListener('click', () => {
+    closeMenus()
+    vscode.postMessage({ type: 'pickFiles' })
   })
 
   historyBtn.addEventListener('click', () => {
@@ -247,6 +308,7 @@
     currentMode = mode ?? 'workspace-write'
     modelName.textContent = model
     modeName.textContent = MODE_LABELS[currentMode]
+    modePill.dataset.mode = currentMode
     workspaceEl.textContent = workspace || 'no workspace'
     if (configured) {
       showChat()
@@ -382,6 +444,11 @@
   function onClear() {
     messagesEl.replaceChildren()
     toolCards.clear()
+    attachments = []
+    renderAttachments()
+    usageInput = 0
+    usageOutput = 0
+    usageEl.textContent = '0↑ · 0↓'
     onAssistantDone()
     setStatus('idle')
   }
@@ -393,6 +460,8 @@
       case 'configured': onConfigured(); break
       case 'models': onModels(message); break
       case 'sessions': onSessions(message); break
+      case 'attachments': onAttachments(message); break
+      case 'usage': onUsage(message); break
       case 'status': setStatus(message.status); break
       case 'systemMessage': onSystemMessage(message); break
       case 'assistantDelta': onAssistantDelta(message); break
@@ -431,7 +500,10 @@
     inputEl.style.height = 'auto'
     const container = addContainer('YOU')
     addMessageEl('user', escapeHtml(text), container)
-    vscode.postMessage({ type: 'prompt', text })
+    const files = attachments
+    attachments = []
+    renderAttachments()
+    vscode.postMessage({ type: 'prompt', text, files })
   }
 
   sendBtn.addEventListener('click', send)

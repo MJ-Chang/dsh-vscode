@@ -28,6 +28,13 @@ export type UiEvent =
   | { type: 'assistantDone' }
   | { type: 'toolCall'; callId: string; name: string; args: string }
   | { type: 'toolResult'; callId: string; name: string; ok: boolean; summary: string }
+  | { type: 'usage'; input: number; output: number }
+
+/** One file attached to a user prompt. */
+export interface AttachedFile {
+  name: string
+  content: string
+}
 
 export type RuntimeStatus = 'starting' | 'ready' | 'busy' | 'idle' | 'error' | 'stopped'
 
@@ -200,17 +207,20 @@ export class HarnessRuntime {
     this.emit({ type: 'status', status: 'idle' })
   }
 
-  /** Queue one user prompt on the current session. */
-  async prompt(text: string): Promise<void> {
+  /** Queue one user prompt on the current session, optionally with attached files. */
+  async prompt(text: string, attachments: AttachedFile[] = []): Promise<void> {
     await this.start()
     const client = this.client
     const sessionId = this.sessionId
     if (client === undefined || sessionId === undefined) {
       throw new Error('DeepSeek Harness runtime is not ready')
     }
-    const message: ContentBlock = { type: 'text', text }
+    const blocks: ContentBlock[] = [{ type: 'text', text }]
+    for (const file of attachments) {
+      blocks.push({ type: 'text', text: `\n<attachment name="${file.name}">\n\`\`\`\n${file.content}\n\`\`\`\n</attachment>` })
+    }
     this.emit({ type: 'status', status: 'busy' })
-    await client.prompt(sessionId, [message])
+    await client.prompt(sessionId, blocks)
   }
 
   /** Abort the active turn via the bridge's session/cancel method. */
@@ -359,9 +369,15 @@ export class HarnessRuntime {
         }
         return
       }
-      case 'assistant/message':
+      case 'assistant/message': {
+        const usage = (event.data as { usage?: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number } }).usage
+        if (usage !== undefined) {
+          const input = usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0)
+          this.emit({ type: 'usage', input, output: usage.outputTokens })
+        }
         this.emit({ type: 'assistantDone' })
         return
+      }
       case 'tool/call':
         this.emit({
           type: 'toolCall',

@@ -29,26 +29,35 @@
     <header id="header">
       <div class="header-main">
         <span id="workspace" class="workspace"></span>
+        <button id="history-btn" class="pill" title="Conversation history">history ▾</button>
         <span id="status" class="status status-idle">idle</span>
       </div>
     </header>
 
     <main id="messages" class="messages" aria-live="polite"></main>
 
-    <!-- popup menus (positioned above the composer) -->
+    <!-- popup menus -->
     <div id="menu-layer" class="menu-layer" hidden>
       <div id="model-menu" class="menu" hidden></div>
       <div id="mode-menu" class="menu" hidden></div>
     </div>
 
     <footer id="composer">
+      <div id="attachments" class="attachments" hidden></div>
       <textarea id="input" rows="2" placeholder="Ask to read, write, or change your project… (Enter to send)"
                 aria-label="Message"></textarea>
       <div class="composer-bar">
-        <button id="model-btn" class="pill" title="Model">model <span id="model-name" class="pill-value"></span></button>
-        <button id="mode-btn" class="pill" title="Permission mode">mode <span id="mode-name" class="pill-value"></span></button>
+        <button id="attach-btn" class="icon-btn" title="Attach files">📎</button>
+        <button id="model-btn" class="select-btn" title="Model">
+          <span class="select-btn-label">model</span>
+          <span id="model-name" class="select-btn-value">…</span>
+          <span class="select-btn-caret">▾</span>
+        </button>
+        <button id="mode-btn" class="pill mode-pill" title="Permission mode">
+          <span id="mode-name">…</span>
+        </button>
+        <span id="usage" class="usage" title="Tokens used this conversation">0↑ · 0↓</span>
         <span class="spacer"></span>
-        <button id="history-btn" class="pill" title="History">history ▾</button>
         <button id="send-btn" class="send-btn" title="Send">Send</button>
       </div>
     </footer>

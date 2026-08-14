@@ -209,7 +209,40 @@ body { display: flex; flex-direction: column; }
 #input:focus { outline: 1px solid var(--vscode-focusBorder); }
 #input:disabled { opacity: 0.5; }
 
-.composer-bar { display: flex; align-items: center; gap: 6px; }
+.composer-bar { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; }
+
+.select-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: var(--pill-radius);
+  padding: 5px 10px;
+  font: inherit; font-size: 11.5px;
+  cursor: pointer;
+  min-width: 0;
+  max-width: 45%;
+}
+.select-btn:hover { background: var(--vscode-button-secondaryHoverBackground); }
+.select-btn-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; opacity: 0.7; }
+.select-btn-value {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-weight: 550;
+}
+.select-btn-caret { opacity: 0.7; }
+
+.icon-btn {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-input-border, var(--vscode-widget-border));
+  border-radius: var(--pill-radius);
+  width: 26px; height: 26px;
+  font-size: 13px;
+  cursor: pointer;
+  flex: none;
+  line-height: 1;
+}
+.icon-btn:hover { background: var(--vscode-button-secondaryHoverBackground); }
 
 .pill {
   display: inline-flex; align-items: center; gap: 6px;
@@ -223,9 +256,21 @@ body { display: flex; flex-direction: column; }
   white-space: nowrap;
 }
 .pill:hover { background: var(--vscode-button-secondaryHoverBackground); }
-.pill-value { opacity: 0.75; max-width: 90px; overflow: hidden; text-overflow: ellipsis; }
 
-.spacer { flex: 1; }
+.mode-pill { max-width: 34%; overflow: hidden; text-overflow: ellipsis; }
+.mode-pill[data-mode='read-only'] { color: var(--vscode-errorForeground, #f14c4c); border-color: currentColor; }
+.mode-pill[data-mode='workspace-write'] { color: var(--vscode-textLink-foreground, #3794ff); border-color: currentColor; }
+.mode-pill[data-mode='danger-full-access'] { color: #d97757; border-color: currentColor; }
+
+.usage {
+  font-family: var(--mono);
+  font-size: calc(var(--mono-size) - 2px);
+  color: var(--vscode-descriptionForeground);
+  white-space: nowrap;
+  flex: none;
+}
+
+.spacer { flex: 1; min-width: 4px; }
 
 .send-btn {
   background: var(--clay);
@@ -235,10 +280,40 @@ body { display: flex; flex-direction: column; }
   padding: 6px 16px;
   font: inherit; font-size: 12px; font-weight: 600;
   cursor: pointer;
+  flex: none;
 }
 .send-btn:hover:not(:disabled) { background: var(--clay-hover); }
 .send-btn:disabled { opacity: 0.45; cursor: default; }
 .send-btn.stop { background: var(--vscode-inputValidation-errorBackground, #8a2e2e); }
+
+/* ---------- attachments ---------- */
+
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--vscode-editorWidget-background);
+  border: 1px solid var(--vscode-widget-border);
+  border-radius: var(--pill-radius);
+  padding: 3px 8px;
+  font-size: 11.5px;
+  max-width: 100%;
+}
+.attachment-chip .name {
+  font-family: var(--mono);
+  font-size: calc(var(--mono-size) - 1px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  max-width: 160px;
+}
+.attachment-chip .size { color: var(--vscode-descriptionForeground); font-size: 10.5px; flex: none; }
+.attachment-chip .remove {
+  background: none; border: none; color: var(--vscode-descriptionForeground);
+  cursor: pointer; font-size: 13px; line-height: 1; padding: 0; flex: none;
+}
+.attachment-chip .remove:hover { color: var(--vscode-errorForeground, #f14c4c); }
 
 /* ============ MENUS ============ */
 
@@ -254,7 +329,7 @@ body { display: flex; flex-direction: column; }
   border-radius: var(--pill-radius);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
   padding: 4px;
-  max-height: 260px;
+  max-height: min(320px, 45vh);
   overflow-y: auto;
 }
 .menu-item {

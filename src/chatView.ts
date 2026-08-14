@@ -8,8 +8,9 @@
  */
 
 import { readFileSync } from 'node:fs'
+import * as path from 'node:path'
 import * as vscode from 'vscode'
-import { HarnessRuntime, type UiEvent } from './runtime'
+import { HarnessRuntime, type AttachedFile, type UiEvent } from './runtime'
 
 /** Primary (activity bar) view id — used only when the secondary sidebar is unavailable. */
 export const CHAT_VIEW_ID = 'dsh-vscode-chat-view'
@@ -21,6 +22,7 @@ const API_KEY_SECRET = 'dshVscode.apiKey'
 interface WebviewMessage {
   type: string
   text?: string
+  files?: AttachedFile[]
 }
 
 /**
@@ -128,9 +130,38 @@ export class ChatViewProvider implements vscode.WebviewViewProvider {
           await view.webview.postMessage({ type: 'sessions', sessions })
           break
         }
+        case 'pickFiles': {
+          const workspace = vscode.workspace.workspaceFolders?.[0]
+          const picked = await vscode.window.showOpenDialog({
+            canSelectMany: true,
+            canSelectFiles: true,
+            canSelectFolders: false,
+            openLabel: 'Attach',
+            ...(workspace === undefined ? {} : { defaultUri: workspace.uri }),
+          })
+          if (picked === undefined || picked.length === 0) break
+          const files: AttachedFile[] = []
+          const MAX_BYTES = 96 * 1024
+          for (const uri of picked) {
+            try {
+              const content = readFileSync(uri.fsPath, 'utf8')
+              files.push({
+                name: path.basename(uri.fsPath),
+                content: content.length > MAX_BYTES ? `${content.slice(0, MAX_BYTES)}\n… [truncated]` : content,
+              })
+            } catch (error) {
+              await view.webview.postMessage({
+                type: 'error',
+                message: `Could not read ${uri.fsPath}: ${error instanceof Error ? error.message : String(error)}`,
+              })
+            }
+          }
+          if (files.length > 0) await view.webview.postMessage({ type: 'attachments', files })
+          break
+        }
         case 'prompt':
           if (typeof message.text === 'string' && message.text.trim() !== '') {
-            await this.runtime.prompt(message.text)
+            await this.runtime.prompt(message.text, Array.isArray(message.files) ? message.files : [])
           }
           break
         case 'stop':

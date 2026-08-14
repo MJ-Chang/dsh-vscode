@@ -91,13 +91,29 @@ await post({ type: 'status', status: 'busy' })
 const sendBtn = document.getElementById('send-btn')
 check('send button becomes Stop while busy', sendBtn.textContent === 'Stop')
 
+// --- token usage ---
+await post({ type: 'usage', input: 1200, output: 340 })
+await post({ type: 'usage', input: 800, output: 100 })
+check('usage display accumulates tokens', document.getElementById('usage').textContent.includes('2,000↑') && document.getElementById('usage').textContent.includes('440↓'))
+
+// --- attachments ---
+document.getElementById('attach-btn').click()
+await tick()
+check('attach button posts pickFiles', posted.some((m) => m.type === 'pickFiles'))
+await post({ type: 'attachments', files: [{ name: 'src/main.ts', content: 'export const x = 1' }] })
+check('attachment chip rendered', document.querySelector('.attachment-chip') !== null)
+check('attachment shows file name', document.querySelector('.attachment-chip .name')?.textContent === 'src/main.ts')
+
 // --- user message (after returning to idle) ---
 await post({ type: 'status', status: 'idle' })
 document.getElementById('input').value = 'fix the bug'
 sendBtn.click()
 await tick()
 check('user message rendered', [...document.querySelectorAll('.msg.user')].some((el) => el.textContent.includes('fix the bug')))
-check('prompt posted', posted.some((m) => m.type === 'prompt' && m.text === 'fix the bug'))
+const promptMsg = posted.find((m) => m.type === 'prompt' && m.text === 'fix the bug')
+check('prompt posted', promptMsg !== undefined)
+check('prompt carries attachments', Array.isArray(promptMsg?.files) && promptMsg.files.length === 1 && promptMsg.files[0].name === 'src/main.ts')
+check('attachments cleared after send', document.querySelectorAll('.attachment-chip').length === 0)
 
 // --- error path ---
 await post({ type: 'error', message: 'runtime exploded' })
