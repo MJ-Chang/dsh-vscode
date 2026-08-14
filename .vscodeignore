@@ -8,3 +8,7 @@ dist-types/**
 tsconfig.json
 esbuild.mjs
 scripts/**
+.smoke-sessions/**
+.smoke-workspace/**
+smoke-output.txt
+*.vsix
