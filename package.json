@@ -3,7 +3,7 @@
     "displayName":  "DeepSeek Harness for VS Code",
     "description":  "Run DeepSeek Harness inside VS Code: chat with the agent and edit your project, like Claude Code / Codex / Copilot.",
     "version": "0.2.0",
-    "publisher":  "dsh-vscode",
+    "publisher":  "mj-chang",
     "icon":  "media/icon.png",
     "repository":  {
                        "type":  "git",
