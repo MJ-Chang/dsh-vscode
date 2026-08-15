@@ -1,6 +1,6 @@
 {
     "name":  "deepseek-harness-chat",
-    "displayName":  "DeepSeek Harness for VS Code",
+    "displayName":  "DeepSeek Harness Chat for VS Code",
     "description":  "Run DeepSeek Harness inside VS Code: chat with the agent and edit your project, like Claude Code / Codex / Copilot.",
     "version": "0.2.0",
     "publisher":  "mj-chang",
