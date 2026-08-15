@@ -29,7 +29,7 @@ npm run package && vsce publish
 
 （可選）Marketplace 商店圖示需要 128×128 PNG：準備好後在 `package.json` 加回 `"icon": "media/icon.png"` 即可；活動列/側欄圖示維持 SVG 不受影響。
 
-不發 Marketplace 也沒關係：使用者可以從 GitHub Releases 下載 `.vsix` 直接安裝（`code --install-extension dsh-vscode-0.2.0.vsix`）。
+不發 Marketplace 也沒關係：使用者可以從 GitHub Releases 下載 `.vsix` 直接安裝（`code --install-extension deepseek-harness-chat-0.2.0.vsix`）。
 
 ## 3. 之後每次發版
 

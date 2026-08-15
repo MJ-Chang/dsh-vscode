@@ -11,11 +11,11 @@
 
 ### 方式一：下載安裝檔（最簡單，推薦）
 
-1. 到 [Releases 頁面](https://github.com/MJ-Chang/dsh-vscode/releases/latest) 下載 `dsh-vscode-0.2.0.vsix`
-   （直連：[dsh-vscode-0.2.0.vsix](https://github.com/MJ-Chang/dsh-vscode/releases/latest/download/dsh-vscode-0.2.0.vsix)）
+1. 到 [Releases 頁面](https://github.com/MJ-Chang/dsh-vscode/releases/latest) 下載 `deepseek-harness-chat-0.2.0.vsix`
+   （直連：[deepseek-harness-chat-0.2.0.vsix](https://github.com/MJ-Chang/dsh-vscode/releases/latest/download/deepseek-harness-chat-0.2.0.vsix)）
 2. 安裝（任選一種）：
    - VS Code 延伸模組面板 → `⋯` → **Install from VSIX...** → 選剛剛下載的檔案；或
-   - `code --install-extension dsh-vscode-0.2.0.vsix`
+   - `code --install-extension deepseek-harness-chat-0.2.0.vsix`
 3. 重載視窗（若原本開著）：`Ctrl+Shift+P` → `Developer: Reload Window`
 
 之後 VS Code 右側邊欄會出現 **DeepSeek Harness** 圖示，點開 → 輸入 API key → 開始使用。
